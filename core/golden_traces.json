@@ -1,0 +1,126 @@
+{
+ "version": "0.3",
+ "terms": {
+  "T01": [
+   "{\"term\":\"T01\",\"ev\":\"bind\",\"name\":\"n1\",\"kind\":\"int\",\"val\":\"42\"}",
+   "{\"term\":\"T01\",\"ev\":\"result\",\"kind\":\"int\",\"val\":\"42\"}"
+  ],
+  "T02": [
+   "{\"term\":\"T02\",\"ev\":\"bind\",\"name\":\"n1\",\"kind\":\"float\",\"val\":\"0x1.4000000000000p+1\"}",
+   "{\"term\":\"T02\",\"ev\":\"result\",\"kind\":\"float\",\"val\":\"0x1.4000000000000p+1\"}"
+  ],
+  "T03": [
+   "{\"term\":\"T03\",\"ev\":\"bind\",\"name\":\"a\",\"kind\":\"int\",\"val\":\"1\"}",
+   "{\"term\":\"T03\",\"ev\":\"bind\",\"name\":\"b\",\"kind\":\"int\",\"val\":\"2\"}",
+   "{\"term\":\"T03\",\"ev\":\"bind\",\"name\":\"s\",\"kind\":\"int\",\"val\":\"3\"}",
+   "{\"term\":\"T03\",\"ev\":\"bind\",\"name\":\"c\",\"kind\":\"int\",\"val\":\"3\"}",
+   "{\"term\":\"T03\",\"ev\":\"bind\",\"name\":\"r1\",\"kind\":\"int\",\"val\":\"9\"}",
+   "{\"term\":\"T03\",\"ev\":\"result\",\"kind\":\"int\",\"val\":\"9\"}"
+  ],
+  "T04": [
+   "{\"term\":\"T04\",\"ev\":\"bind\",\"name\":\"a\",\"kind\":\"float\",\"val\":\"0x1.999999999999ap-4\"}",
+   "{\"term\":\"T04\",\"ev\":\"bind\",\"name\":\"b\",\"kind\":\"float\",\"val\":\"0x1.999999999999ap-3\"}",
+   "{\"term\":\"T04\",\"ev\":\"bind\",\"name\":\"r1\",\"kind\":\"float\",\"val\":\"0x1.3333333333334p-2\"}",
+   "{\"term\":\"T04\",\"ev\":\"result\",\"kind\":\"float\",\"val\":\"0x1.3333333333334p-2\"}"
+  ],
+  "T05": [
+   "{\"term\":\"T05\",\"ev\":\"bind\",\"name\":\"a\",\"kind\":\"int\",\"val\":\"1\"}",
+   "{\"term\":\"T05\",\"ev\":\"bind\",\"name\":\"b\",\"kind\":\"int\",\"val\":\"0\"}",
+   "{\"term\":\"T05\",\"ev\":\"err\",\"name\":\"r1\",\"code\":\"DomainError\"}",
+   "{\"term\":\"T05\",\"ev\":\"result\",\"kind\":\"err\",\"val\":\"Err(DomainError)\"}"
+  ],
+  "T06": [
+   "{\"term\":\"T06\",\"ev\":\"bind\",\"name\":\"x1\",\"kind\":\"int\",\"val\":\"1\"}",
+   "{\"term\":\"T06\",\"ev\":\"bind\",\"name\":\"f\",\"kind\":\"closure\",\"val\":\"<closure#1>\"}",
+   "{\"term\":\"T06\",\"ev\":\"bind\",\"name\":\"x1_2\",\"kind\":\"int\",\"val\":\"105\"}",
+   "{\"term\":\"T06\",\"ev\":\"bind\",\"name\":\"arg\",\"kind\":\"int\",\"val\":\"5\"}",
+   "{\"term\":\"T06\",\"ev\":\"bind\",\"name\":\"s#1\",\"kind\":\"int\",\"val\":\"6\"}",
+   "{\"term\":\"T06\",\"ev\":\"bind\",\"name\":\"r1\",\"kind\":\"int\",\"val\":\"6\"}",
+   "{\"term\":\"T06\",\"ev\":\"result\",\"kind\":\"int\",\"val\":\"6\"}"
+  ],
+  "T07": [
+   "{\"term\":\"T07\",\"ev\":\"bind\",\"name\":\"f\",\"kind\":\"closure\",\"val\":\"<closure#1>\"}",
+   "{\"term\":\"T07\",\"ev\":\"bind\",\"name\":\"z\",\"kind\":\"int\",\"val\":\"0\"}",
+   "{\"term\":\"T07\",\"ev\":\"bind\",\"name\":\"e1\",\"kind\":\"int\",\"val\":\"1\"}",
+   "{\"term\":\"T07\",\"ev\":\"bind\",\"name\":\"e2\",\"kind\":\"int\",\"val\":\"2\"}",
+   "{\"term\":\"T07\",\"ev\":\"bind\",\"name\":\"e3\",\"kind\":\"int\",\"val\":\"3\"}",
+   "{\"term\":\"T07\",\"ev\":\"bind\",\"name\":\"v\",\"kind\":\"vec\",\"val\":\"[1, 2, 3]\"}",
+   "{\"term\":\"T07\",\"ev\":\"bind\",\"name\":\"s#1\",\"kind\":\"int\",\"val\":\"1\"}",
+   "{\"term\":\"T07\",\"ev\":\"bind\",\"name\":\"r1.step1\",\"kind\":\"int\",\"val\":\"1\"}",
+   "{\"term\":\"T07\",\"ev\":\"bind\",\"name\":\"s#2\",\"kind\":\"int\",\"val\":\"3\"}",
+   "{\"term\":\"T07\",\"ev\":\"bind\",\"name\":\"r1.step2\",\"kind\":\"int\",\"val\":\"3\"}",
+   "{\"term\":\"T07\",\"ev\":\"bind\",\"name\":\"s#3\",\"kind\":\"int\",\"val\":\"6\"}",
+   "{\"term\":\"T07\",\"ev\":\"bind\",\"name\":\"r1.step3\",\"kind\":\"int\",\"val\":\"6\"}",
+   "{\"term\":\"T07\",\"ev\":\"bind\",\"name\":\"r1\",\"kind\":\"int\",\"val\":\"6\"}",
+   "{\"term\":\"T07\",\"ev\":\"result\",\"kind\":\"int\",\"val\":\"6\"}"
+  ],
+  "T08": [
+   "{\"term\":\"T08\",\"ev\":\"bind\",\"name\":\"cond\",\"kind\":\"bool\",\"val\":\"true\"}",
+   "{\"term\":\"T08\",\"ev\":\"bind\",\"name\":\"tb\",\"kind\":\"int\",\"val\":\"10\"}",
+   "{\"term\":\"T08\",\"ev\":\"bind\",\"name\":\"fb\",\"kind\":\"int\",\"val\":\"20\"}",
+   "{\"term\":\"T08\",\"ev\":\"bind\",\"name\":\"r1\",\"kind\":\"int\",\"val\":\"10\"}",
+   "{\"term\":\"T08\",\"ev\":\"result\",\"kind\":\"int\",\"val\":\"10\"}"
+  ],
+  "T09": [
+   "{\"term\":\"T09\",\"ev\":\"bind\",\"name\":\"i\",\"kind\":\"int\",\"val\":\"3\"}",
+   "{\"term\":\"T09\",\"ev\":\"coerce\",\"name\":\"r1\",\"tag\":\"widen\",\"lossy\":false,\"kind\":\"float\",\"val\":\"0x1.8000000000000p+1\"}",
+   "{\"term\":\"T09\",\"ev\":\"result\",\"kind\":\"float\",\"val\":\"0x1.8000000000000p+1\"}"
+  ],
+  "T10": [
+   "{\"term\":\"T10\",\"ev\":\"bind\",\"name\":\"x\",\"kind\":\"float\",\"val\":\"0x1.8000000000000p+1\"}",
+   "{\"term\":\"T10\",\"ev\":\"coerce\",\"name\":\"r1\",\"tag\":\"narrow\",\"lossy\":true,\"kind\":\"int\",\"val\":\"3\"}",
+   "{\"term\":\"T10\",\"ev\":\"result\",\"kind\":\"int\",\"val\":\"3\"}"
+  ],
+  "T11": [
+   "{\"term\":\"T11\",\"ev\":\"bind\",\"name\":\"x\",\"kind\":\"float\",\"val\":\"0x1.c000000000000p+1\"}",
+   "{\"term\":\"T11\",\"ev\":\"err\",\"name\":\"r1\",\"code\":\"PrecisionLoss\"}",
+   "{\"term\":\"T11\",\"ev\":\"result\",\"kind\":\"err\",\"val\":\"Err(PrecisionLoss)\"}"
+  ],
+  "T12": [
+   "{\"term\":\"T12\",\"ev\":\"bind\",\"name\":\"five\",\"kind\":\"int\",\"val\":\"5\"}",
+   "{\"term\":\"T12\",\"ev\":\"bind\",\"name\":\"seven\",\"kind\":\"int\",\"val\":\"7\"}",
+   "{\"term\":\"T12\",\"ev\":\"bind\",\"name\":\"add\",\"kind\":\"closure\",\"val\":\"<closure#1>\"}",
+   "{\"term\":\"T12\",\"ev\":\"bind\",\"name\":\"inner#1\",\"kind\":\"closure\",\"val\":\"<closure#2>\"}",
+   "{\"term\":\"T12\",\"ev\":\"bind\",\"name\":\"c1\",\"kind\":\"closure\",\"val\":\"<closure#2>\"}",
+   "{\"term\":\"T12\",\"ev\":\"bind\",\"name\":\"s#1\",\"kind\":\"int\",\"val\":\"12\"}",
+   "{\"term\":\"T12\",\"ev\":\"bind\",\"name\":\"c2\",\"kind\":\"int\",\"val\":\"12\"}",
+   "{\"term\":\"T12\",\"ev\":\"result\",\"kind\":\"int\",\"val\":\"12\"}"
+  ],
+  "T13": [
+   "{\"term\":\"T13\",\"ev\":\"bind\",\"name\":\"f\",\"kind\":\"closure\",\"val\":\"<closure#1>\"}",
+   "{\"term\":\"T13\",\"ev\":\"bind\",\"name\":\"one\",\"kind\":\"float\",\"val\":\"0x1.0000000000000p+0\"}",
+   "{\"term\":\"T13\",\"ev\":\"bind\",\"name\":\"m1\",\"kind\":\"float\",\"val\":\"0x1.0000000000000p-1\"}",
+   "{\"term\":\"T13\",\"ev\":\"bind\",\"name\":\"m2\",\"kind\":\"float\",\"val\":\"0x1.0000000000000p+1\"}",
+   "{\"term\":\"T13\",\"ev\":\"bind\",\"name\":\"m3\",\"kind\":\"float\",\"val\":\"0x1.0000000000000p+2\"}",
+   "{\"term\":\"T13\",\"ev\":\"bind\",\"name\":\"v\",\"kind\":\"vec\",\"val\":\"[0x1.0000000000000p-1, 0x1.0000000000000p+1, 0x1.0000000000000p+2]\"}",
+   "{\"term\":\"T13\",\"ev\":\"bind\",\"name\":\"s#1\",\"kind\":\"float\",\"val\":\"0x1.0000000000000p-1\"}",
+   "{\"term\":\"T13\",\"ev\":\"bind\",\"name\":\"r1.step1\",\"kind\":\"float\",\"val\":\"0x1.0000000000000p-1\"}",
+   "{\"term\":\"T13\",\"ev\":\"bind\",\"name\":\"s#2\",\"kind\":\"float\",\"val\":\"0x1.0000000000000p+0\"}",
+   "{\"term\":\"T13\",\"ev\":\"bind\",\"name\":\"r1.step2\",\"kind\":\"float\",\"val\":\"0x1.0000000000000p+0\"}",
+   "{\"term\":\"T13\",\"ev\":\"bind\",\"name\":\"s#3\",\"kind\":\"float\",\"val\":\"0x1.0000000000000p+2\"}",
+   "{\"term\":\"T13\",\"ev\":\"bind\",\"name\":\"r1.step3\",\"kind\":\"float\",\"val\":\"0x1.0000000000000p+2\"}",
+   "{\"term\":\"T13\",\"ev\":\"bind\",\"name\":\"r1\",\"kind\":\"float\",\"val\":\"0x1.0000000000000p+2\"}",
+   "{\"term\":\"T13\",\"ev\":\"result\",\"kind\":\"float\",\"val\":\"0x1.0000000000000p+2\"}"
+  ],
+  "T14": [
+   "{\"term\":\"T14\",\"ev\":\"bind\",\"name\":\"five\",\"kind\":\"int\",\"val\":\"5\"}",
+   "{\"term\":\"T14\",\"ev\":\"bind\",\"name\":\"f\",\"kind\":\"closure\",\"val\":\"<closure#1>\"}",
+   "{\"term\":\"T14\",\"ev\":\"bind\",\"name\":\"z#1\",\"kind\":\"int\",\"val\":\"0\"}",
+   "{\"term\":\"T14\",\"ev\":\"bind\",\"name\":\"c#1\",\"kind\":\"bool\",\"val\":\"false\"}",
+   "{\"term\":\"T14\",\"ev\":\"bind\",\"name\":\"tb#1\",\"kind\":\"int\",\"val\":\"1\"}",
+   "{\"term\":\"T14\",\"ev\":\"bind\",\"name\":\"fb#1\",\"kind\":\"int\",\"val\":\"-1\"}",
+   "{\"term\":\"T14\",\"ev\":\"bind\",\"name\":\"r#1\",\"kind\":\"int\",\"val\":\"-1\"}",
+   "{\"term\":\"T14\",\"ev\":\"bind\",\"name\":\"r1\",\"kind\":\"int\",\"val\":\"-1\"}",
+   "{\"term\":\"T14\",\"ev\":\"result\",\"kind\":\"int\",\"val\":\"-1\"}"
+  ],
+  "S01": [
+   "{\"term\":\"S01\",\"ev\":\"static\",\"code\":\"SC-060\",\"phase\":\"typecheck\"}"
+  ],
+  "S02": [
+   "{\"term\":\"S02\",\"ev\":\"static\",\"code\":\"SC-002\",\"phase\":\"typecheck\"}"
+  ],
+  "S03": [
+   "{\"term\":\"S03\",\"ev\":\"static\",\"code\":\"SC-070\",\"phase\":\"parse\"}"
+  ]
+ }
+}

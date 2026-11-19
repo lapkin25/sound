@@ -1,0 +1,7 @@
+{
+  "T06": {
+    "func": "term_T06",
+    "type": "dynamic",
+    "expected_canon": "6"
+  }
+}

@@ -1,0 +1,1 @@
+*.o\n*.out\ntest_all\n*.class\n*.pyc\n__pycache__/\n.DS_Store\n
