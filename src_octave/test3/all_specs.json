@@ -1,0 +1,17 @@
+[
+  {
+    "name": "current_flow_betweenness",
+    "inputs": [{"name":"graph","type":"matrix","dtype":"Float64","required":true}],
+    "outputs":[{"name":"bc","type":"vector","dtype":"Float64"}],
+    "contract":{"square_input":true}
+  },
+  {
+    "name": "laplace_solve",
+    "inputs":[
+      {"name":"L","type":"matrix","dtype":"Float64"},
+      {"name":"b","type":"vector","dtype":"Float64"},
+      {"name":"lambda","type":"scalar","dtype":"Float64"}
+    ],
+    "outputs":[{"name":"x","type":"vector","dtype":"Float64"}]
+  }
+]

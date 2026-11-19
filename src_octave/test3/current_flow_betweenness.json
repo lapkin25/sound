@@ -1,0 +1,18 @@
+{
+  "name": "current_flow_betweenness",
+  "description": "Вычисляет current-flow betweenness centrality через псевдообратную лапласиану",
+  "inputs": [
+    { "name": "graph", "type": "matrix", "dtype": "Float64", "required": true }
+  ],
+  "outputs": [
+    { "name": "bc", "type": "vector", "dtype": "Float64" }
+  ],
+  "flags": {
+    "lossy": true,
+    "trusted": false
+  },
+  "contract": {
+    "square_input": true,
+    "error_on_singular": true
+  }
+}
