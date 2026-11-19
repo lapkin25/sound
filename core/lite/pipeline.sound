@@ -1,0 +1,23 @@
+# pipeline.sound — конвейер: кадры камеры -> признаки -> оценка -> сглаживание
+spec Pipeline {
+
+  fact frames -> Matrix[F64, ?, 512];                        # python
+
+  rule extract_features(frames: Matrix[F64, R, 512])         # python
+       -> Matrix[F64, R, 64];
+
+  rule score(batch: Matrix[F64, R, 64])                      # java
+       -> Result[Vector[F64, 10], DomainError];
+
+  rule smooth(scores: Vector[F64, 10], window: Int64)        # octave
+       requires window in [3, 31] and window % 2 == 1
+       -> Vector[F64, 10];
+
+  wire extract_features.frames = frames.out as move;
+  wire score.batch = extract_features.out as move;
+  wire smooth.scores = score.out as view handle [DomainError];
+  wire smooth.window = 7;
+
+  invariant every frame has exactly one features;
+  invariant scores within [0, 1];
+}
