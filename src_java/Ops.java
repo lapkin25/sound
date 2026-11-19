@@ -25,7 +25,7 @@ public final class Ops {
         if (b.isErr()) return b;
         if (isNum(a) && isNum(b)) {
             if (a.type == SoundValue.Type.INT && b.type == SoundValue.Type.INT)
-                return SoundValue.intOf(a.i + b.i);      // отклонение D-J1
+                return SoundValue.intOf(a.i + b.i);      // см. отклонение D-J1
             a = widen(a); b = widen(b);
             return SoundValue.floatOf(a.f + b.f);
         }
@@ -56,7 +56,7 @@ public final class Ops {
         return SoundValue.errOf("TypeMismatch");
     }
 
-    /** Деление: всегда float; на ноль — IEEE (inf/-inf/nan). */
+    /** Деление: всегда float; деление на ноль — IEEE (inf/-inf/nan). */
     public static SoundValue div(SoundValue a, SoundValue b) {
         if (a.isErr()) return a;
         if (b.isErr()) return b;

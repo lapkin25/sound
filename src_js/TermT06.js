@@ -1,26 +1,35 @@
-// TermT06.js
+// TermT06.js — автогенерируемый терм T06: лексический захват значения.
+// Канонический журнал:
+//   bind x1 1
+//   bind f <closure>
+//   bind x1 105
+//   result 6
+// Затенение x1 = 105 НЕ видно замыканию: оно захватило снимок env1.
 const { SoundValue, Trace } = require('./SoundValue');
 const Ops = require('./Ops');
 
-// Терм T06: замыкание, которое возвращает 6.
-// Важно: лексический захват значения, а не переменной.
 function termT06() {
-  const x = SoundValue.intOf(1n);
-  const y = SoundValue.intOf(5n);
+  // let x1 = 1
+  const x1 = SoundValue.intOf(1n);
+  Trace.bind('x1', x1);
+  const env1 = new Ops.Env('x1', x1, null);
 
-  // bind событий по контракту
-  Trace.bind('x', x);
-  Trace.bind('y', y);
+  // let f = fun y -> x1 + y  — захват снимка env1
+  const f = SoundValue.of(new Ops.Closure(env1,
+    (cenv, y) => Ops.add(Ops.Env.get(cenv, 'x1'), y)));
+  Trace.bind('f', f);
+  const env2 = new Ops.Env('f', f, env1);
 
-  const sum = Ops.add(x, y);
-  Trace.bind('sum', sum);
+  // let x1 = 105 — затенение; замыкание его не видит
+  const x1s = SoundValue.intOf(105n);
+  Trace.bind('x1', x1s);
+  const env3 = new Ops.Env('x1', x1s, env2);
 
-  Trace.result(sum);
-  // Ожидаемый вывод:
-  // bind x 1
-  // bind y 5
-  // bind sum 6
-  // result 6
+  // f 5
+  const res = Ops.apply(Ops.Env.get(env3, 'f'), SoundValue.intOf(5n));
+  Trace.result(res);
+  return res;
 }
 
 termT06();
+Trace.flush();

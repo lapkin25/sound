@@ -7,15 +7,15 @@ public final class SoundValue {
     public enum Type { INT, FLOAT, BOOL, VEC, CLOSURE, ERR }
 
     public final Type type;
-    public final long i;            // INT: см. отклонение D-J1 (long вместо неограниченных целых)
+    public final long i;            // INT: см. пометку об отклонении D-J1 ниже
     public final double f;          // FLOAT: единственный плавающий тип, IEEE-754 F64
     public final boolean b;
     public final double[] vec;      // VEC: память принадлежит кодогенератору
-    public final Ops.Closure clo;
+    public final Closure clo;
     public final String err;        // ERR: статический литерал из сгенерированного кода
 
     private SoundValue(Type t, long i, double f, boolean b, double[] vec,
-                       Ops.Closure clo, String err) {
+                       Closure clo, String err) {
         this.type = t; this.i = i; this.f = f; this.b = b;
         this.vec = vec; this.clo = clo; this.err = err;
     }
@@ -24,7 +24,7 @@ public final class SoundValue {
     public static SoundValue floatOf(double x) { return new SoundValue(Type.FLOAT, 0, x, false, null, null, null); }
     public static SoundValue boolOf(boolean x) { return new SoundValue(Type.BOOL, 0, 0, x, null, null, null); }
     public static SoundValue vecOf(double[] d) { return new SoundValue(Type.VEC, 0, 0, false, d, null, null); }
-    public static SoundValue of(Ops.Closure c) { return new SoundValue(Type.CLOSURE, 0, 0, false, null, c, null); }
+    public static SoundValue of(Closure c)     { return new SoundValue(Type.CLOSURE, 0, 0, false, null, c, null); }
     public static SoundValue errOf(String code){ return new SoundValue(Type.ERR, 0, 0, false, null, null, code); }
 
     public boolean isErr() { return type == Type.ERR; }

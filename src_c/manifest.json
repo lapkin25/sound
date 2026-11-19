@@ -1,0 +1,28 @@
+{
+  "corpus": [
+    "T01_literal_int",
+    "T02_literal_float",
+    "T03_add_int",
+    "T04_add_mixed",
+    "T05_narrow_lossy",
+    "T06_closure_shadow",
+    "T07_div_zero_pos",
+    "T08_div_zero_neg",
+    "T09_div_zero_nan",
+    "T10_err_propagation",
+    "T11_map_vector",
+    "T12_reduce",
+    "T13_if_select",
+    "T14_subnormal",
+    "T15_neg_zero",
+    "T16_nan_canonical",
+    "T17_bigint_overflow"
+  ],
+  "canonical_trace_T06": [
+    "bind x1 1",
+    "bind f <closure>",
+    "bind x1 105",
+    "result 6"
+  ],
+  "note": "T06 — золотой терм: замыкание обязано дать 6, а не 110 (динамический скоуп)."
+}
