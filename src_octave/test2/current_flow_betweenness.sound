@@ -1,0 +1,23 @@
+node current_flow_betweenness {
+  name: "current_flow_betweenness"
+  backend: "octave"
+
+  input: {
+    graph: matrix[double]   // смежность, row-major, TRIOMAT1
+  }
+
+  output: {
+    bc: vector[double]      // betweenness centrality, row-major
+  }
+
+  flags: {
+    lossy: true             // double-only, возможна потеря точности
+    trusted: false          // результат зависит от численного решателя
+  }
+
+  contract: {
+    shape: { graph: [n, n], bc: [n] }
+    dtype: { graph: "Float64", bc: "Float64" }
+    error: "Err(SingularMatrix)" if L_reg singular
+  }
+}

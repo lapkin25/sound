@@ -1,0 +1,27 @@
+node admm_step {
+  name: "admm_step"
+  backend: "octave"
+
+  input: {
+    z: vector[double],       % глобальная переменная
+    u: vector[double],       % двойственная переменная
+    rho: scalar[double],     % параметр ADMM
+    A: matrix[double],        % матрица ограничений
+    b: vector[double]         % правая часть
+  }
+
+  output: {
+    x_proj: vector[double]   % проекция на аффинное подпространство
+  }
+
+  flags: {
+    lossy: true
+    trusted: false
+  }
+
+  contract: {
+    shape: { z: [n], u: [n], A: [m,n], b: [m], x_proj: [n] }
+    dtype: all "Float64"
+    error: "Err(SingularMatrix)" при вырождении нормальных уравнений
+  }
+}

@@ -1,0 +1,25 @@
+node laplace_solve {
+  name: "laplace_solve"
+  backend: "octave"
+
+  input: {
+    L: matrix[double],      % лапласиан
+    b: vector[double],      % правая часть
+    lambda: scalar[double] % коэффициент утечки
+  }
+
+  output: {
+    x: vector[double]       % решение (L + lambda*I)x = b
+  }
+
+  flags: {
+    lossy: true
+    trusted: false
+  }
+
+  contract: {
+    shape: { L: [n,n], b: [n], x: [n] }
+    dtype: { L: "Float64", b: "Float64", x: "Float64" }
+    error: "Err(SingularMatrix)" если система вырождена
+  }
+}
