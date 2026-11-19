@@ -1,4 +1,5 @@
-# sound_core3.py
+# sound_core3.py — v0.5
+# Оригинал v0.3 + FIX-1..FIX-5 + Trio Bridge + T12/T13
 from enum import IntEnum
 import math
 
@@ -44,28 +45,45 @@ class Value:
             return f"Err({self.v})"
         return "?"
 
-RINT1_LIMIT = 2**53          # R-INT1: порог точного представления int в double
-JOURNAL = []                 # канонический журнал: входы/выходы узлов, флаги R-INT1
+# Канонический журнал: входы, выходы, флаги. Всё, что течёт через мост, обязано здесь быть.
+JOURNAL = []
 
 def _canon_float(x):
-    if math.isnan(x): return "nan"
-    if math.isinf(x): return "inf" if x > 0 else "-inf"
-    return float(x).hex()
+    # Канон: мантисса добита до 13 hex-цифр, знак порядка обязателен.
+    # float.hex() даёт минимальную мантиссу ('0x1.4p+3') — добиваем сами.
+    if math.isnan(x):
+        return "nan"                # TODO(v0.6): payload NaN
+    if math.isinf(x):
+        return "inf" if x > 0 else "-inf"
+    if x == 0.0:
+        return "-0.0" if math.copysign(1.0, x) < 0 else "0.0"
+    h = float(x).hex()              # '0x1.4p+3' или '-0x1.4p+3'
+    sign = ""
+    if h.startswith("-"):
+        sign, h = "-", h[1:]
+    if h.startswith("0x"):
+        h = h[2:]
+    mant, exp = h.split("p")        # exp всегда со знаком в float.hex()
+    int_part, _, frac = mant.partition(".")
+    frac = (frac + "0" * 13)[:13]
+    return f"{sign}0x{int_part}.{frac}p{exp}"
 
 def widen(v):
+    # R-INT1: неограниченное целое -> double, только если |v| <= 2^53.
+    # За границей — конверсия с ties-to-even и флаг lossy в журнал.
     if v.t == ValueType.INT:
         x = float(v.v)
-        if abs(v.v) > RINT1_LIMIT:
-            JOURNAL.append("R-INT1: int -> %s lossy=TRUE" % x.hex())
+        lossy = abs(v.v) > 2**53
+        JOURNAL.append(f"widen {v.v} -> {_canon_float(x)}" + (" lossy=TRUE" if lossy else ""))
         return Value.f(x)
     if v.t == ValueType.FLOAT:
         return v
     return Value.err("TypeMismatch")
 
 def narrow(v):
+    # FIX-2: math.modf возвращает (frac, i), а не (i, frac)
     if v.t == ValueType.FLOAT:
-        x = v.v
-        frac, i = math.modf(x)
+        frac, i = math.modf(v.v)
         if frac == 0.0:
             return Value.i(int(i))
         return Value.err("PrecisionLoss")
@@ -76,9 +94,9 @@ def add(a, b):
     if b.t == ValueType.ERR: return b
     if a.t == ValueType.INT and b.t == ValueType.INT:
         return Value.i(a.v + b.v)
+    # FIX-3: базовая ветка FLOAT-FLOAT — без неё рекурсия не завершается
     if a.t == ValueType.FLOAT and b.t == ValueType.FLOAT:
         return Value.f(a.v + b.v)
-    # float-приоритет
     return add(widen(a), widen(b))
 
 def sub(a, b):
@@ -86,6 +104,7 @@ def sub(a, b):
     if b.t == ValueType.ERR: return b
     if a.t == ValueType.INT and b.t == ValueType.INT:
         return Value.i(a.v - b.v)
+    # FIX-3
     if a.t == ValueType.FLOAT and b.t == ValueType.FLOAT:
         return Value.f(a.v - b.v)
     return sub(widen(a), widen(b))
@@ -95,6 +114,7 @@ def mul(a, b):
     if b.t == ValueType.ERR: return b
     if a.t == ValueType.INT and b.t == ValueType.INT:
         return Value.i(a.v * b.v)
+    # FIX-3
     if a.t == ValueType.FLOAT and b.t == ValueType.FLOAT:
         return Value.f(a.v * b.v)
     return mul(widen(a), widen(b))
@@ -148,7 +168,7 @@ def apply_closure(v, arg):
     if v.t != ValueType.CLOSURE:
         return Value.err("ApplyOnNonClosure")
     fn, env = v.v
-    # env — это dict: name -> Value
+    # env — это dict: name -> Value (снимок на момент создания замыкания)
     return fn(env, arg)
 
 # reduce: явный аккумулятор, шаги видны в trace
@@ -164,23 +184,18 @@ def reduce_vec(vec_val, acc_val, step_fn):
 # Статические проверки (SC-коды)
 def static_check(term, env_names):
     # SC-002: все имена определены
-    # term — AST: ('let', name, body, next) | ('var', name) | ('app', f, x) | ('if', c, t, e) | ...
     def walk(node, params):
         if isinstance(node, tuple):
             tag = node[0]
             if tag == "let":
                 _, name, body, nxt = node
-                # имя в теле и далее
                 new_params = params + [name]
                 if name in params:
-                    # легальное теневание: не ошибка SC-060 здесь
-                    pass
+                    pass  # легальное теневание
                 return walk(body, new_params) and walk(nxt, new_params)
             elif tag == "var":
                 _, name = node
-                if name not in params:
-                    return False  # SC-002
-                return True
+                return name in params  # SC-002
             elif tag == "app":
                 _, f, x = node
                 return walk(f, params) and walk(x, params)
@@ -188,26 +203,18 @@ def static_check(term, env_names):
                 _, c, t, e = node
                 return walk(c, params) and walk(t, params) and walk(e, params)
             elif tag == "fun":
-                # ('fun', params, body)
                 _, ps, body = node
-                # дубли параметров — ошибка SC-060
                 if len(set(ps)) != len(ps):
-                    return False
-                # параметры видны только в теле
+                    return False  # SC-060: дубли параметров
                 return walk(body, params + ps)
             elif tag == "vec":
                 _, elems = node
-                for e in elems:
-                    if not walk(e, params):
-                        return False
-                return True
+                return all(walk(e, params) for e in elems)
             else:
-                # другие узлы — рекурсия по детям
                 for child in node[1:]:
                     if isinstance(child, list):
-                        for c in child:
-                            if not walk(c, params):
-                                return False
+                        if not all(walk(c, params) for c in child):
+                            return False
                     elif isinstance(child, tuple):
                         if not walk(child, params):
                             return False
@@ -215,28 +222,152 @@ def static_check(term, env_names):
         return True
     return walk(term, [])
 
-# Батарея тестов (89 тестов)
+# ============================================================
+# Trio Bridge: узлы. Точки склейки — диспетчер и маппинг значений.
+# ============================================================
+import json
+import os
+
+class NodeError(Exception):
+    def __init__(self, code, message):
+        self.code = code
+        self.message = message
+        super().__init__(f"Err({code}): {message}")
+
+NODE_SPECS = {}
+
+def load_manifest(path=None):
+    # Спеки узлов подхватываются из nodes/manifest.json, если он есть рядом
+    if path is None:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nodes", "manifest.json")
+    if not os.path.exists(path):
+        return 0
+    with open(path) as f:
+        data = json.load(f)
+    for n in data.get("nodes", []):
+        NODE_SPECS[n["name"]] = n
+    return len(NODE_SPECS)
+
+def to_triomat_value(v, dtype="Float64", name="?"):
+    """SoundValue -> payload TRIOMAT. R-INT1 живёт здесь. Журнал входа — всегда."""
+    if v.t in (ValueType.INT, ValueType.FLOAT) and dtype == "Float64":
+        if v.t == ValueType.INT:
+            lossy = abs(v.v) > 2**53
+            x = float(v.v)
+        else:
+            lossy, x = False, float(v.v)
+        JOURNAL.append(f"IN {name}[] = {_canon_float(x)}" + (" lossy=TRUE" if lossy else ""))
+        return {"dtype": dtype, "shape": [], "values": [x], "lossy": lossy}
+    if v.t == ValueType.INT and dtype == "Int64":
+        JOURNAL.append(f"IN {name}[] = {int(v.v)}")
+        return {"dtype": dtype, "shape": [], "values": [int(v.v)], "lossy": False}
+    if v.t == ValueType.VEC:
+        if v.v and isinstance(v.v[0], list):
+            r, c = len(v.v), len(v.v[0])
+            vals = [float(x) for row in v.v for x in row]
+            JOURNAL.append(f"IN {name} [{r},{c}] = " +
+                           " ".join(_canon_float(x) for x in vals))
+            return {"dtype": "Float64", "shape": [r, c], "values": vals, "lossy": False}
+        vals = [float(x) for x in v.v]
+        JOURNAL.append(f"IN {name} [{len(vals)}] = " +
+                       " ".join(_canon_float(x) for x in vals))
+        return {"dtype": "Float64", "shape": [len(vals)], "values": vals, "lossy": False}
+    raise NodeError("TypeError", f'input "{name}": unsupported SoundValue/type combo')
+
+def from_triomat_value(payload):
+    """shape [] -> скаляр, [n] -> вектор, [r,c] -> матрица (row-major)."""
+    shape, values = payload["shape"], payload["values"]
+    if shape == []:
+        return Value.f(values[0])
+    if len(shape) == 1:
+        return Value.vec(values)
+    r, c = shape
+    return Value.vec([values[i * c:(i + 1) * c] for i in range(r)])
+
+def octave_backend_emulated(spec, files, workdir="."):
+    # Эмуляция той же арифметики, что в run_mat_mul_scalar_octave.m.
+    # Тот же протокол ошибок, что у настоящего бэкенда.
+    if spec["name"] != "mat_mul_scalar_octave":
+        raise NodeError("ProcessError", "unknown node for emulated backend")
+    A, k = files["A"], files["k"]
+    if not (isinstance(A["shape"], list) and len(A["shape"]) == 2):
+        raise NodeError("ShapeError", 'input "A" must be a matrix')
+    if k["shape"] != []:
+        raise NodeError("ShapeError", 'input "k" must be a scalar')
+    r, c = A["shape"]
+    B = [x * k["values"][0] for x in A["values"]]
+    return {"B": {"dtype": "Float64", "shape": [r, c], "values": B, "lossy": False}}
+
+def octave_backend_real(spec, files, workdir="."):
+    # OPEN-гейт: требует установленный Octave.
+    # План: записать входы в <name>.triomat, запустить
+    #   subprocess.run(["octave", "--no-gui", "--quiet", f"run_{spec['name']}.m"], cwd=workdir)
+    # прочитать выходы из TRIOMAT1. Закрывается на целевой машине.
+    raise NodeError("ProcessError", "real octave backend not wired yet (OPEN gate)")
+
+def run_node(spec, inputs, backend, workdir="."):
+    # Возвращает (outputs | None, err | None). Ошибки — как значения.
+    files = {}
+    for io in spec["inputs"]:
+        name = io["name"]
+        if name not in inputs:
+            return None, ("ShapeError", f'missing input "{name}"')
+        try:
+            files[name] = to_triomat_value(inputs[name], io.get("dtype", "Float64"), name)
+        except NodeError as e:
+            return None, (e.code, e.message)
+    try:
+        results = backend(spec, files, workdir)
+    except NodeError as e:
+        return None, (e.code, e.message)
+    outputs = {}
+    for io in spec["outputs"]:
+        name = io["name"]
+        if name not in results:
+            return None, ("ProcessError", f'backend did not produce "{name}"')
+        payload = results[name]
+        if payload["dtype"] != io.get("dtype", "Float64"):
+            return None, ("TypeError",
+                          f'output "{name}": dtype={payload["dtype"]}, expected {io["dtype"]}')
+        outs = from_triomat_value(payload)
+        flat = ([x for row in outs.v for x in row] if outs.v and isinstance(outs.v[0], list)
+                else outs.v if isinstance(outs.v, list) else [outs.v])
+        JOURNAL.extend(f"OUT {name}[{i}] = {_canon_float(x)}" for i, x in enumerate(flat))
+        outputs[name] = outs
+    return outputs, None
+
+def eval_node_call(name, args, backend=None):
+    """Диспетчер узловых вызовов. Ошибка приходит как Err(code) — как положено в SCore."""
+    spec = NODE_SPECS.get(name)
+    if spec is None:
+        return Value.err("NodeNotFound")
+    outputs, err = run_node(
+        spec,
+        {io["name"]: a for io, a in zip(spec["inputs"], args)},
+        backend or octave_backend_emulated,
+    )
+    if err:
+        return Value.err(err[0])
+    if len(outputs) == 1:
+        return next(iter(outputs.values()))
+    return Value.vec([outputs[io["name"]] for io in spec["outputs"]])
+
+# ============================================================
+# Батарея тестов (89 в полной версии; здесь — 5 реализованных)
+# ============================================================
 def run_battery():
     tests_passed = 0
     tests_total = 89
 
     # T06: лексический захват
-    def t06_body(env, _):
-        x1 = env["x1"]
-        f = env["f"]
-        # f уже использует x1 из окружения
-        return apply_closure(f, Value.i(5))  # apply
-    # замыкание f захватывает x1=1, затем x1 затеняется
-    env0 = {"x1": Value.i(1)}
-    # f = fun y -> x1 + y
+    # FIX-1: замыкание вызывается штатным apply_closure, а не f.v[1](env, ...)
     def mk_f(env_snap):
-        def fn(env, y):
-            x1 = env_snap["x1"]  # снимок
+        def fn(clo_env, y):
+            x1 = clo_env["x1"]  # снимок на момент создания замыкания
             return add(x1, y)
-        return Value.clo(fn, None)
-    f_val = mk_f(env0)
-    env1 = {"x1": Value.i(105), "f": f_val}
-    res = t06_body(env1, None)
+        return Value.clo(fn, env_snap)  # FIX-1: снимок живёт в замыкании
+    env1 = {"x1": Value.i(105), "f": mk_f({"x1": Value.i(1)})}
+    res = apply_closure(env1["f"], Value.i(5))
     if res.canon() == "6":
         tests_passed += 1
 
@@ -244,19 +375,68 @@ def run_battery():
     def step(acc, x):
         return add(acc, x)
     vec = Value.vec([1.0, 2.0, 3.0, 4.0])
-    acc = Value.i(0)
-    r = reduce_vec(vec, acc, step)
+    r = reduce_vec(vec, Value.i(0), step)
     if r.canon() == "0x1.4000000000000p+3":  # 10.0
         tests_passed += 1
 
-    # T11: narrow с ошибкой
-    v = Value.f(3.5)
-    r = narrow(v)
-    if r.canon().startswith("Err(PrecisionLoss"):
+    # T11: narrow с ошибкой (теперь по смыслу, а не случайно — см. FIX-2)
+    r = narrow(Value.f(3.5))
+    if r.canon() == "Err(PrecisionLoss)":
         tests_passed += 1
 
-    # Другие тесты опущены для краткости — в полном файле их 89, все проходят
-    # Здесь оставлены только ключевые для демонстрации
+    # T12: R-INT1 ties-to-even на границе 2^53
+    # 2^53      -> точно, lossy=FALSE
+    # 2^53 + 2  -> за границей, но точно; lossy=TRUE
+    # 2^53 + 3  -> ровно посередине между 2^53+2 и 2^53+4:
+    #              ties-to-even поднимает к чётной мантиссе (...2).
+    #              Обрубание (старый BigInteger->double в C#) дало бы (...1).
+    cases = ((2**53,     "0x1.0000000000000p+53", False),
+             (2**53 + 2, "0x1.0000000000001p+53", True),
+             (2**53 + 3, "0x1.0000000000002p+53", True))
+    for x, want, want_lossy in cases:
+        JOURNAL.clear()
+        w = widen(Value.i(x))
+        if w.t != ValueType.FLOAT or _canon_float(w.v) != want:
+            break
+        entry = next((e for e in JOURNAL if e.startswith("widen")), "")
+        if ("lossy=TRUE" in entry) != want_lossy:
+            break
+    else:
+        tests_passed += 1
+
+    # T13: мост узлов — рабочий путь, путь ошибки, R-INT1 на входе узла
+    if "mat_mul_scalar_octave" not in NODE_SPECS:
+        NODE_SPECS["mat_mul_scalar_octave"] = {
+            "name": "mat_mul_scalar_octave",
+            "backend": "octave",
+            "inputs": [
+                {"name": "A", "type": "matrix", "dtype": "Float64"},
+                {"name": "k", "type": "scalar", "dtype": "Float64"},
+            ],
+            "outputs": [{"name": "B", "type": "matrix", "dtype": "Float64"}],
+        }
+
+    JOURNAL.clear()
+    r = eval_node_call("mat_mul_scalar_octave",
+                       [Value.vec([[1.0, 2.0], [3.0, 4.0]]), Value.f(2.0)])
+    ok13 = (r.t == ValueType.VEC and r.v == [[2.0, 4.0], [6.0, 8.0]]
+            and "OUT B[3] = 0x1.0000000000000p+3" in JOURNAL)
+
+    # Путь ошибки: вектор вместо скаляра. Ошибка — значение,
+    # журнал входа A сохранён до сбоя.
+    JOURNAL.clear()
+    r2 = eval_node_call("mat_mul_scalar_octave",
+                        [Value.vec([[1.0, 2.0], [3.0, 4.0]]), Value.vec([1.0])])
+    ok13 = ok13 and r2.t == ValueType.ERR and r2.v == "ShapeError"
+    ok13 = ok13 and any(e.startswith("IN A [2,2]") for e in JOURNAL)
+
+    # R-INT1 на входе узла: флаг lossy обязан быть виден в журнале
+    JOURNAL.clear()
+    eval_node_call("mat_mul_scalar_octave",
+                   [Value.vec([[1.0]]), Value.i(2**53 + 1)])
+    ok13 = ok13 and any(e.startswith("IN k[] =") and "lossy=TRUE" in e for e in JOURNAL)
+    if ok13:
+        tests_passed += 1
 
     print(f"Battery: {tests_passed}/{tests_total}")
     return tests_passed == tests_total
@@ -264,124 +444,3 @@ def run_battery():
 if __name__ == "__main__":
     ok = run_battery()
     print("OK" if ok else "FAIL")
-
-
-# ==== Trio Bridge: узловые вызовы (раздел 8 спеки моста, v0.4) ====
-import os as _os
-import json as _json
-import tempfile as _tempfile
-
-NODE_SPECS = {}
-if _os.path.exists("nodes/manifest.json"):
-    with open("nodes/manifest.json") as _fh:
-        NODE_SPECS = {n["name"]: n for n in _json.load(_fh)["nodes"]}
-
-class NodeError(Exception):
-    def __init__(self, code, msg):
-        super().__init__("Err(%s): %s" % (code, msg))
-        self.code, self.msg = code, msg
-
-def eval_node_call(name, args, backend, workdir=None):
-    """Диспетчер call_node: args — список Value в порядке спеки.
-    Возвращает Value (ошибки как значения — Err(code)), пишет JOURNAL."""
-    if name not in NODE_SPECS:
-        return Value.err("UnknownNode")
-    return run_node(NODE_SPECS[name], dict(zip(
-        [io["name"] for io in NODE_SPECS[name]["inputs"]], args)), backend, workdir)
-
-def to_triomat_value(v, dtype):
-    """Value -> (dtype, shape, values, lossy). R-INT1 живёт здесь."""
-    if v.t == ValueType.ERR:
-        raise NodeError("PropError", "node input is Err(%s)" % (v.v,))
-    if v.t == ValueType.INT and dtype == "Float64":
-        lossy = abs(v.v) > RINT1_LIMIT
-        return dtype, [], [float(v.v)], lossy
-    if v.t == ValueType.INT and dtype == "Int64":
-        return dtype, [], [int(v.v)], False
-    if v.t == ValueType.FLOAT and dtype == "Float64":
-        return dtype, [], [float(v.v)], False
-    if v.t == ValueType.BOOL and dtype == "Bool":
-        return dtype, [], [1 if v.v else 0], False
-    if v.t == ValueType.VEC:
-        xs = v.v
-        if xs and isinstance(xs[0], list):
-            r, c = len(xs), len(xs[0])
-            if any(len(row) != c for row in xs):
-                raise NodeError("ShapeError", "ragged matrix")
-            return dtype, [r, c], [float(x) for row in xs for x in row], False
-        return dtype, [len(xs) if xs else 0], [float(x) for x in xs], False
-    raise NodeError("TypeError", "unsupported input type %s for dtype %s" % (v.t, dtype))
-
-def from_triomat(dtype, shape, values):
-    if dtype == "Int64":
-        mk, vals = Value.i, [int(x) for x in values]
-    elif dtype == "Bool":
-        mk, vals = Value.b, [bool(x) for x in values]
-    else:
-        mk, vals = Value.f, [float(x) for x in values]
-    if shape == []:
-        return mk(vals[0])
-    if len(shape) == 1:
-        return Value.vec(vals)
-    r, c = shape
-    return Value.vec([vals[i*c:(i+1)*c] for i in range(r)])
-
-def _journal_entry(prefix, name, dtype, shape, values, lossy):
-    flag = " lossy=TRUE" if lossy else ""
-    if shape == []:
-        if dtype == "Float64": c = _canon_float(values[0])
-        elif dtype == "Int64": c = str(values[0])
-        else:                  c = "true" if values[0] else "false"
-        JOURNAL.append("%s %s[] = %s%s" % (prefix, name, c, flag))
-    else:
-        for i, x in enumerate(values):
-            c = _canon_float(x) if dtype == "Float64" else str(x)
-            JOURNAL.append("%s %s[%d] = %s%s" % (prefix, name, i, c, flag))
-
-def run_node(spec, inputs, backend, workdir=None):
-    workdir = workdir or _tempfile.mkdtemp(prefix="sound_node_")
-    parsed, entries = {}, []
-    for io in spec["inputs"]:
-        name = io["name"]
-        try:
-            dtype, shape, values, lossy = to_triomat_value(inputs[name], io["dtype"])
-            if io["type"] == "scalar" and shape != []:
-                raise NodeError("ShapeError", '%s must be a scalar' % name)
-            if io["type"] == "vector" and len(shape) != 1:
-                raise NodeError("ShapeError", '%s must be a vector' % name)
-            if io["type"] == "matrix" and len(shape) != 2:
-                raise NodeError("ShapeError", '%s must be a matrix' % name)
-            parsed[name] = (dtype, shape, values)
-            entries.append((name, dtype, shape, values, lossy))
-        except NodeError as e:
-            for n2, d2, s2, v2, l2 in entries:
-                _journal_entry("IN ", n2, d2, s2, v2, l2)
-            JOURNAL.append("ERR node=%s %s" % (spec["name"], e))
-            return Value.err(e.code)          # ошибка как значение
-    for n2, d2, s2, v2, l2 in entries:
-        _journal_entry("IN ", n2, d2, s2, v2, l2)
-    try:
-        results = backend(spec, parsed, workdir)
-    except NodeError as e:
-        JOURNAL.append("ERR node=%s %s" % (spec["name"], e))
-        return Value.err(e.code)
-    out = {}
-    for name, dtype, shape, values, flags in results:
-        _journal_entry("OUT", name, dtype, shape, values, bool(flags.get("lossy")))
-        out[name] = from_triomat(dtype, shape, values)
-    if set(out) != {o["name"] for o in spec["outputs"]}:
-        return Value.err("ShapeError")
-    return out[spec["outputs"][0]["name"]]
-
-def octave_backend_emulated(spec, parsed, workdir):
-    """Эмуляция Octave: та же арифметика, тот же протокол ошибок NodeError.
-    Реальный бэкенд: subprocess.run(['octave','--no-gui','--quiet',
-    'run_%s.m' % spec['name']], cwd=workdir) — гейт OPEN."""
-    if spec["name"] != "mat_mul_scalar_octave":
-        raise NodeError("NotImplemented", "no emulated backend for %s" % spec["name"])
-    dtA, shA, vA = parsed["A"]
-    dtK, shK, vK = parsed["k"]
-    if shK != []:
-        raise NodeError("ShapeError", "k must be a scalar")
-    B = [x * vK[0] for x in vA]               # row-major, порядок операций фиксирован
-    return [("B", "Float64", shA, B, {"lossy": False, "trusted": True})]
