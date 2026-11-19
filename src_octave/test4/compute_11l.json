@@ -1,0 +1,9 @@
+{
+  "name": "compute_11l",
+  "backend": "external",
+  "command": { "program": "11l", "args": ["run", "solution.11l"], "timeout": 30 },
+  "inputs": [{ "name": "graph", "type": "matrix", "dtype": "Float64" }],
+  "outputs": [{ "name": "result", "type": "vector", "dtype": "Float64" }],
+  "flags": { "lossy": true, "trusted": false },
+  "contract": { "square_input": true }
+}
