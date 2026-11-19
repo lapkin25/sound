@@ -1,0 +1,4 @@
+bind graph Matrix[62,62] Float64 flags={lossy:false,trusted:true} sha256=dc8d0e526e5b3b41
+bind bc Vector[62] Float64 flags={lossy:true,trusted:false} sha256=118b3faa5cfda0b4
+err none
+result bc
