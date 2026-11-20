@@ -1,57 +1,172 @@
-# trio_bridge.py — reference-реализация TTB-Spec v0.1: мост Sound <-> Octave.
-# Контракты выведены из чек-листа раздела 8 (test_bridge.py).
-import enum
-import struct
 
+# trio_bridge.py — reference-реализация TTB-Spec v0.1, приведённая к канону TRIOMAT1
+import struct, json
 import numpy as np
+from enum import Enum
 
-TWO53 = 2 ** 53
+LIM = 2**53  # граница точного представления int в double
 
-class TrioError(enum.Enum):
-    IntRangeOverflow = "IntRangeOverflow"
-    FractionalInt = "FractionalInt"
-    NaNAsMissing = "NaNAsMissing"
-    TypeMismatch = "TypeMismatch"
-    ShapeError = "ShapeError"
-    MissingField = "MissingField"
-    ResourceLost = "ResourceLost"
+TrioError = Enum("TrioError", {
+    # закрытый набор — TTB-Spec v0.1, раздел 7
+    "TypeMismatch": "TypeMismatch",
+    "ShapeError": "ShapeError",
+    "DomainError": "DomainError",
+    "IntRangeOverflow": "IntRangeOverflow",
+    "FractionalInt": "FractionalInt",
+    "NoCoercion": "NoCoercion",
+    "EncodingFault": "EncodingFault",
+    "NaNAsMissing": "NaNAsMissing",
+    "SentinelDetected": "SentinelDetected",
+    "LayoutMismatch": "LayoutMismatch",
+    "MissingField": "MissingField",
+    "HeterogeneousMatrix": "HeterogeneousMatrix",
+    "NullPointer": "NullPointer",
+    "UnsupportedStreaming": "UnsupportedStreaming",
+    "ResourceLost": "ResourceLost",
+    "UndefinedBridge": "UndefinedBridge",
+    # транспортные коды TRIOMAT1 (вне закрытого набора — см. отчёт сверки)
+    "MalformedHeader": "MalformedHeader",
+    "TypeError": "TypeError",
+    "BoolPayload": "BoolPayload",
+})
 
 class OK:
-    __slots__ = ("value", "warnings")
-    def __init__(self, value=None, warnings=()):
+    def __init__(self, value=None, warnings=None):
         self.value = value
-        self.warnings = list(warnings)
-    def __repr__(self):
-        s = "OK(" + repr(self.value) + ")"
-        if self.warnings:
-            s += " warnings=" + repr(self.warnings)
-        return s
+        self.warnings = list(warnings or [])
 
 class Lossy:
-    __slots__ = ("value", "delta", "warnings")
-    def __init__(self, delta, value=None, warnings=()):
-        self.delta = delta
+    def __init__(self, tag, value=None, warnings=None):
+        self.tag = tag
         self.value = value
-        self.warnings = list(warnings)
-    def __repr__(self):
-        return f"Lossy(delta={self.delta!r}, value={self.value!r})"
+        self.warnings = list(warnings or [])
 
 class Err:
-    __slots__ = ("error", "detail")
-    def __init__(self, error, detail=""):
+    def __init__(self, error, warnings=None):
         self.error = error
-        self.detail = detail
-    def __repr__(self):
-        return f"Err({self.error.value})" + (f" [{self.detail}]" if self.detail else "")
+        self.warnings = list(warnings or [])
 
 class MType:
-    __slots__ = ("dtype", "shape", "domain")
-    def __init__(self, dtype, shape, domain=None):
-        self.dtype = dtype
+    def __init__(self, name, shape, domain="strict"):
+        self.name = name
         self.shape = tuple(shape)
         self.domain = domain
 
-# ---- R-ERR1/R-ERR2: исключения снаружи -> Err-значения внутри ----
+# Заглавные однобуквенные C/F — layout-маркеры (интерпретация, в спеке не описана)
+def _marker(x):
+    return isinstance(x, str) and x in ("C", "F")
+
+def _dimvar(x):
+    return isinstance(x, str) and x != "?" and not _marker(x)
+
+# R-DIM3/5/6/7: унификация DimVar по имени, "?" фиксируется первым значением
+def unify(a, b):
+    a, b = list(a), list(b)
+    if len(a) != len(b):
+        return Err(TrioError.ShapeError)
+    env, qn = {}, 0
+    for x, y in zip(a, b):
+        if _marker(x) or _marker(y):
+            continue
+        if x == "?" and isinstance(y, int):
+            env["?%d" % qn] = y; qn += 1; continue
+        if y == "?" and isinstance(x, int):
+            env["?%d" % qn] = x; qn += 1; continue
+        if isinstance(x, int) and isinstance(y, int):
+            if x != y:
+                return Err(TrioError.ShapeError)
+            continue
+        if _dimvar(x) and _dimvar(y):
+            if x != y:
+                return Err(TrioError.ShapeError)
+            continue
+        if isinstance(x, int) and _dimvar(y):
+            if env.get(y, x) != x:
+                return Err(TrioError.ShapeError)
+            env[y] = x; continue
+        if isinstance(y, int) and _dimvar(x):
+            if env.get(x, y) != y:
+                return Err(TrioError.ShapeError)
+            env[x] = y; continue
+        return Err(TrioError.ShapeError)
+    return OK(env)
+
+def check_widening(a, b):
+    if len(a.shape) != len(b.shape):
+        return Err(TrioError.ShapeError)
+    for x, y in zip(a.shape, b.shape):
+        if y == "?" and x != "?":
+            return Err(TrioError.ShapeError)  # R-DIM6: ослабление только через generalize
+    if a.name == "Float64" and b.name == "Float32":
+        return Lossy("precision")  # R-FLT3
+    if a.name != b.name:
+        return Err(TrioError.TypeMismatch)
+    return OK(None)
+
+def _int_outcome(v):
+    n = abs(v)
+    if n > LIM:
+        return Err(TrioError.IntRangeOverflow)
+    if n == LIM:
+        return Lossy("repr")  # граничная конвенция: ровно 2^53 — Lossy
+    return None
+
+def export_to_octave(arr, mtype, mode="copy"):
+    a = np.asarray(arr)
+    if mtype.name == "Int64" and a.dtype.kind in "iu":
+        outs = [_int_outcome(int(v)) for v in a.ravel()]
+        if any(isinstance(o, Err) for o in outs):
+            return Err(TrioError.IntRangeOverflow)
+        if any(isinstance(o, Lossy) for o in outs):
+            return Lossy("repr", value=a)
+    r = OK(a)
+    if mode == "view":
+        # R-MAT1: view — только при совпадении layout (принимающая сторона Octave — F)
+        # и непрерывности; иначе понижение до copy с диагностикой SC-011 ModeDowngrade
+        contiguous = a.flags.c_contiguous or a.flags.f_contiguous
+        invariant = (a.ndim == 1) or (min(a.shape) == 1)
+        if not (contiguous and (invariant or a.flags.f_contiguous)):
+            r = OK(np.asfortranarray(a),
+                   warnings=["SC-011 ModeDowngrade (R-MAT1): view -> copy (layout mismatch)"])
+    return r
+
+def import_from_octave(arr, mtype):
+    a = np.asarray(arr)
+    if a.dtype == np.bool_ and mtype.name != "Bool":
+        return Err(TrioError.UndefinedBridge)  # R-BOOL
+    if mtype.name == "Bool" and a.dtype.kind in "iuf":
+        return Err(TrioError.UndefinedBridge)  # R-BOOL
+    if a.size == 0:
+        return OK(a)  # конвенция: пустая матрица = Optional.empty (R-OPT1, интерпретация)
+    if mtype.domain != "nan" and a.dtype.kind == "f":
+        if np.isnan(a).any():
+            return Err(TrioError.NaNAsMissing)  # R-NAN, strict
+        if np.isinf(a).any():
+            return Err(TrioError.DomainError)   # R-NAN, strict
+    if mtype.name == "Int64":
+        # R-INT2: Float64 -> Int64
+        if a.dtype.kind == "f":
+            if not np.all(a == np.floor(a)):
+                return Err(TrioError.FractionalInt)
+            m = max(abs(int(v)) for v in a.ravel())
+            if m > LIM:
+                return Err(TrioError.IntRangeOverflow)
+            return OK(a.astype(np.int64))
+        if a.dtype.kind in "iu":
+            m = max(abs(int(v)) for v in a.ravel())
+            if m > LIM:
+                return Err(TrioError.IntRangeOverflow)
+            return OK(a.astype(np.int64))
+        return Err(TrioError.TypeMismatch)
+    if mtype.name == "Float64":
+        return OK(a.astype(np.float64))  # R-FLT1/2: точное расширение
+    if mtype.name == "Float32":
+        if a.dtype == np.float64:
+            return Lossy("precision", value=a.astype(np.float32))  # R-FLT3
+        return OK(a.astype(np.float32))
+    return Err(TrioError.NoCoercion)
+
+# таблица маппинга исключений — не в спеке, только дефолт R-ERR2
 _EXC_MAP = {
     TypeError: TrioError.TypeMismatch,
     IndexError: TrioError.ShapeError,
@@ -59,92 +174,68 @@ _EXC_MAP = {
     MemoryError: TrioError.ResourceLost,
 }
 
-def exception_to_trio(exc):
-    return _EXC_MAP.get(type(exc), TrioError.ResourceLost)
+def exception_to_trio(e):
+    for k, v in _EXC_MAP.items():
+        if isinstance(e, k):
+            return v
+    return TrioError.ResourceLost  # R-ERR2: непереводимое исключение -> ResourceLost
 
-# ---- R-INT2: экспорт int64 -> double (зона гарантии: |v| <= 2^53 - 1) ----
-def export_to_octave(arr, mtype, mode="copy"):
-    a = np.asarray(arr)
-    if mtype.dtype == "Int64":
-        vals = [int(v) for v in a.ravel()]
-        if any(abs(v) > TWO53 for v in vals):
-            return Err(TrioError.IntRangeOverflow)
-        if any(abs(v) == TWO53 for v in vals):
-            return Lossy("repr", a.astype(np.float64))
-        return OK(a.astype(np.float64))
-    # Float64
-    warnings = []
-    if mode == "view" and a.base is not None and a.ndim == 2 and all(d > 1 for d in a.shape):
-        warnings.append("R-MAT1: view downgraded to copy "
-                        "(C-layout не совпадает с column-major Octave)")
-    return OK(a.astype(np.float64, copy=True), warnings)
+_NPD = {"Float64": "<f8", "Int64": "<i8", "Bool": np.bool_}
 
-# ---- R-INT3 / R-OPT1 / R-NAN / R-FLT1: импорт из Octave ----
-def import_from_octave(arr, mtype):
-    a = np.asarray(arr)
-    if a.size and np.isnan(a.astype(np.float64, copy=False)).any() and mtype.domain != "nan":
-        return Err(TrioError.NaNAsMissing)
-    if mtype.dtype == "Int64":
-        f = a.astype(np.float64)
-        if np.any(f != np.floor(f)):
-            return Err(TrioError.FractionalInt)
-        return OK(f.astype(np.int64))
-    if mtype.dtype == "Float64":
-        return OK(a.astype(np.float64))
-    if mtype.dtype == "Float32":
-        f32 = a.astype(np.float32)
-        if a.dtype == np.float64 and np.any(f32.astype(np.float64) != a):
-            return Lossy("precision", f32)
-        return OK(f32)
-    return Err(TrioError.TypeMismatch, f"unsupported dtype {mtype.dtype!r}")
-
-# ---- R-MAT1 (файловая часть): layout в заголовке ----
-_MAGIC = b"TRIOBIN1"
-_DTYPE_CODE = {np.dtype(np.float64): 1, np.dtype(np.int64): 2, np.dtype(np.float32): 3}
-_CODE_DTYPE = {v: k for k, v in _DTYPE_CODE.items()}
+def _np_dt(name):
+    return _NPD[name]
 
 def write_matrix(path, arr, order="C"):
+    # канон TRIOMAT1: [u32 LE: длина заголовка][заголовок JSON][payload C-порядок]
     a = np.asarray(arr)
-    layout = 1 if order == "F" else 0
-    header = _MAGIC + struct.pack("<BBBI", 1, layout, _DTYPE_CODE[a.dtype], a.ndim)
-    for d in a.shape:
-        header += struct.pack("<I", d)
+    if a.dtype == np.float64: name = "Float64"
+    elif a.dtype == np.int64: name = "Int64"
+    elif a.dtype == np.bool_: name = "Bool"
+    else: return Err(TrioError.TypeError)
+    if any(d < 0 for d in a.shape):
+        return Err(TrioError.ShapeError)
+    header = json.dumps(
+        {"magic": "TRIOMAT1", "dtype": name,
+         "shape": [int(d) for d in a.shape],
+         "flags": {"stub": False, "lossy": False, "trusted": True}},
+        separators=(",", ":")).encode("utf-8")
+    # параметр order принят для совместимости теста, но канон пишет payload
+    # всегда в C-порядке: F-массив транскодируется, данные не теряются
+    payload = a.astype(_np_dt(name)).tobytes(order="C")
     with open(path, "wb") as f:
+        f.write(struct.pack("<I", len(header)))
         f.write(header)
-        f.write(a.tobytes(order=order))
+        f.write(payload)
+    return OK(None)
 
 def read_matrix(path):
-    with open(path, "rb") as f:
-        data = f.read()
-    if data[:8] != _MAGIC:
-        raise ValueError("not a TRIOBIN1 file")
-    ver, layout, code, ndim = struct.unpack("<BBBI", data[8:15])   # <BBBI = 7 байт
-    shape = struct.unpack("<" + "I" * ndim, data[15:15 + 4 * ndim])
-    payload = data[15 + 4 * ndim:]
-    order = "F" if layout == 1 else "C"
-    arr = np.frombuffer(payload, dtype=_CODE_DTYPE[code]).reshape(shape, order=order)
-    return arr.copy(), layout
-
-# ---- R-DIM3/R-DIM5/R-DIM6: унификация размерностей и ослабление ----
-def unify(decl, actual):
-    env = {}
-    if len(decl) != len(actual):
-        return Err(TrioError.ShapeError, "rank mismatch")
-    for d, a in zip(decl, actual):
-        if d in ("C", "F"):
-            continue  # маркер layout, не размерность
-        if isinstance(d, str):
-            key = "?" + str(len(env)) if d == "?" else d
-            if key in env and env[key] != a:
-                return Err(TrioError.ShapeError, f"DimVar {d}: {env[key]} != {a}")
-            env[key] = a
-        elif d != a:
-            return Err(TrioError.ShapeError, f"{d} != {a}")
-    return OK(env)
-
-def check_widening(src, dst):
-    # R-DIM6: конкретный размер -> DimVar = обобщение, без явного generalize запрещено
-    for ds, dd in zip(src.shape, dst.shape):
-        if isinstance(dd, str) and not isinstance(ds, str):
-            return Err(TrioError.ShapeError, "R-DIM6: generalization without generalize flag")
-    return OK()
+    data = open(path, "rb").read()
+    if len(data) < 4:
+        return Err(TrioError.MalformedHeader)
+    (hlen,) = struct.unpack("<I", data[:4])
+    if 4 + hlen > len(data):
+        return Err(TrioError.ShapeError)
+    try:
+        h = json.loads(data[4:4 + hlen].decode("utf-8"))
+    except Exception:
+        return Err(TrioError.MalformedHeader)
+    if h.get("magic") != "TRIOMAT1":
+        return Err(TrioError.MalformedHeader)
+    if h.get("dtype") not in _NPD:
+        return Err(TrioError.TypeError)
+    shape = h.get("shape")
+    if (not isinstance(shape, list) or
+            any((not isinstance(d, int)) or d < 0 for d in shape)):
+        return Err(TrioError.ShapeError)
+    n = 1
+    for d in shape:
+        n *= d
+    nbytes = n if h["dtype"] == "Bool" else n * 8
+    payload = data[4 + hlen:]
+    if len(payload) != nbytes:
+        return Err(TrioError.ShapeError)  # обрезанный payload / лишние байты
+    if h["dtype"] == "Bool" and any(b not in (0, 1) for b in payload):
+        return Err(TrioError.BoolPayload)
+    arr = np.frombuffer(payload, dtype=_np_dt(h["dtype"])).reshape(shape).copy()
+    # канон хранит payload только в C-порядке; поля layout в формате нет
+    return (arr, 0)

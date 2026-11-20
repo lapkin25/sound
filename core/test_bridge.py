@@ -1,3 +1,4 @@
+
 """test_bridge.py — прогон чек-листа TTB-Spec v0.1, раздел 8."""
 import numpy as np
 from trio_bridge import (
@@ -12,7 +13,7 @@ def check(name, cond, detail=""):
 
 # T1: R-INT2 / R-INT3 — граница 2^53
 r = export_to_octave(np.array([2**53 - 1, 2**53], dtype=np.int64), MType("Int64", (2,)))
-check("R-INT2: 2^53-1 и 2^53 -> Lossy(repr)", isinstance(r, Lossy) and r.delta == "repr")
+check("R-INT2: 2^53-1 и 2^53 -> Lossy(repr)", isinstance(r, Lossy) and r.tag == "repr")
 r = export_to_octave(np.array([2**53 + 1], dtype=np.int64), MType("Int64", (1,)))
 check("R-INT2: 2^53+1 -> Err(IntRangeOverflow)",
       isinstance(r, Err) and r.error is TrioError.IntRangeOverflow)
@@ -54,7 +55,7 @@ check("R-OPT1: пустая 0x0 = Optional.empty -> OK", isinstance(r, OK))
 
 # T4: R-DIM5 / R-DIM6 / R-DIM3
 env = unify(("?", "C"), (512, 512))
-check("R-DIM5: \'?\' фиксируется значением 512", isinstance(env, OK) and env.value["?0"] == 512)
+check("R-DIM5: '?' фиксируется значением 512", isinstance(env, OK) and env.value["?0"] == 512)
 check("R-DIM3: DimVar R!=R отклоняется",
       isinstance(unify(("R", "R"), (512, 256)), Err))
 r = check_widening(MType("Float64", (512, 512)), MType("Float64", ("?", "?")))
