@@ -199,8 +199,13 @@ function ok = value_ok(val, expect)
 endfunction
 
 function c = strcell(js)
-  c = cell(numel(js));
+  if ~iscell(js)
+    c = {js};          % на всякий случай: одиночная строка из jsondecode
+    return
+  endif
+  c = cell(1, numel(js));   % именно 1 x N, не cell(numel(js))
   for k = 1:numel(js)
     c{k} = js{k};
   endfor
 endfunction
+
