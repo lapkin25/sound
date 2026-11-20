@@ -330,9 +330,9 @@ class Session:
            while (q + 1.0) * b <= a:
                q += 1.0
            r = a - q * b                 # точно: целые < 2^53
+           self.n += 1
            self.journal.append('t%d mod(%s,%s) -> %s'
                                % (self.n, canon_bits(a), canon_bits(b), canon_bits(r)))
-           self.n += 1
            self.last = r
            return r
 
@@ -346,9 +346,9 @@ class Session:
                q -= 1.0
            while (q + 1.0) * b <= a:
                q += 1.0
+           self.n += 1
            self.journal.append('t%d quotient(%s,%s) -> %s'
                                % (self.n, canon_bits(a), canon_bits(b), canon_bits(q)))
-           self.n += 1
            self.last = q
            return q
 
@@ -361,9 +361,9 @@ class Session:
            if not (0 <= k < len(lst)):
                raise SoundError('Part: индекс %d вне списка длины %d' % (k, len(lst)))
            r = lst[k]
+           self.n += 1
            self.journal.append('t%d part(%s,%s) -> %s'
                                % (self.n, canon_bits(lst), canon_bits(i), canon_bits(r)))
-           self.n += 1
            self.last = r
            return r
 
@@ -377,9 +377,9 @@ class Session:
            for x in lst:
                acc = self.apply_fn(f, [acc, x], env)
                out.append(acc)
+           self.n += 1
            self.journal.append('t%d foldlist(%s,%s) -> %s'
                                % (self.n, canon_bits(acc), canon_bits(lst), canon_bits(out)))
-           self.n += 1
            self.last = out
            return out
 
