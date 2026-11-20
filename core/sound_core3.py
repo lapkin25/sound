@@ -1,10 +1,8 @@
-# sound_core3.py — v0.8 (кодогенератор моделей)
-# Оригинал v0.3 + FIX-1..FIX-5 + Trio Bridge (T13) + структурные типы (T14)
-# + TRIOREC1 (T15) + кодогенератор моделей из JSON-спеки (T16)
+# sound_core3.py — v0.9
+# v0.3 + FIX-1..FIX-5 + Trio Bridge + records (T14) + TRIOREC1 (T15)
+#       + codegen (T16) + TRIOREC2: вложенные рекорды и ref-поля (T17)
 from enum import IntEnum
 import math, json, os
-
-_PI = float.fromhex("0x1.921fb54442d18p+1")   # pi зафиксирована битами, не рантаймом
 
 class ValueType(IntEnum):
     INT = 0
@@ -15,14 +13,11 @@ class ValueType(IntEnum):
     ERR = 5
     STRUCT = 6
 
-VT = ValueType
-
 class Value:
     __slots__ = ("t", "v")
     def __init__(self, t, v):
         self.t = t
         self.v = v
-
     @staticmethod
     def i(x): return Value(ValueType.INT, x)
     @staticmethod
@@ -37,23 +32,15 @@ class Value:
     def err(code): return Value(ValueType.ERR, code)
     @staticmethod
     def struct(name, fields, lossy=None):
-        return Value(ValueType.STRUCT, (name, fields, lossy or []))
-
+        return Value(ValueType.STRUCT, (name, fields, lossy or {}))
     def canon(self):
-        if self.t == ValueType.INT:
-            return str(self.v)
-        if self.t == ValueType.FLOAT:
-            return _canon_float(self.v)
-        if self.t == ValueType.BOOL:
-            return "true" if self.v else "false"
-        if self.t == ValueType.VEC:
-            return "[" + ",".join(str(x) for x in self.v) + "]"
-        if self.t == ValueType.CLOSURE:
-            return "<closure>"
-        if self.t == ValueType.ERR:
-            return f"Err({self.v})"
-        if self.t == ValueType.STRUCT:
-            return canon_val(self)
+        if self.t == ValueType.INT: return str(self.v)
+        if self.t == ValueType.FLOAT: return _canon_float(self.v)
+        if self.t == ValueType.BOOL: return "true" if self.v else "false"
+        if self.t == ValueType.VEC: return "[" + ",".join(canon_val(x) for x in self.v) + "]"
+        if self.t == ValueType.CLOSURE: return "<closure>"
+        if self.t == ValueType.ERR: return "Err(" + str(self.v) + ")"
+        if self.t == ValueType.STRUCT: return canon_val(self)
         return "?"
 
 # Канонический журнал: входы, выходы, флаги. Всё, что течёт через мост, обязано здесь быть.
@@ -61,38 +48,47 @@ JOURNAL = []
 
 def _canon_float(x):
     # Канон: мантисса добита до 13 hex-цифр, знак порядка обязателен.
-    if math.isnan(x):
-        return "nan"                # TODO(v0.9): payload NaN
-    if math.isinf(x):
-        return "inf" if x > 0 else "-inf"
-    if x == 0.0:
-        return "-0.0" if math.copysign(1.0, x) < 0 else "0.0"
+    if math.isnan(x): return "nan"          # TODO(v0.10): payload NaN
+    if math.isinf(x): return "inf" if x > 0 else "-inf"
+    if x == 0.0: return "-0.0" if math.copysign(1.0, x) < 0 else "0.0"
     h = float(x).hex()
     sign = ""
-    if h.startswith("-"):
-        sign, h = "-", h[1:]
-    if h.startswith("0x"):
-        h = h[2:]
+    if h.startswith("-"): sign, h = "-", h[1:]
+    if h.startswith("0x"): h = h[2:]
     mant, exp = h.split("p")
     int_part, _, frac = mant.partition(".")
     frac = (frac + "0" * 13)[:13]
-    return f"{sign}0x{int_part}.{frac}p{exp}"
+    return sign + "0x" + int_part + "." + frac + "p" + exp
 
-def _parse_canon(s):
+def parse_canon_float(s):
+    if s == "-0.0": return -0.0
     if s == "inf": return math.inf
     if s == "-inf": return -math.inf
     if s == "nan": return math.nan
-    try:
-        return float(s)             # десятичные токены: 0.0, -0.0
-    except ValueError:
-        return float.fromhex(s)     # канонический hex
+    return float.fromhex(s)
+
+def canon_val(v):
+    if v.t == ValueType.STRUCT:
+        name, fields, _ = v.v
+        return "{" + name + " " + " ".join(fn + "=" + canon_val(val) for fn, _, val in fields) + "}"
+    return v.canon()
+
+def struct_eq(a, b):
+    # Равенство побитовое по канону: -0.0 и 0.0 различаются.
+    if a.t == ValueType.ERR or b.t == ValueType.ERR:
+        return Value.err("PropError")
+    if a.t != b.t:
+        return Value.b(False)
+    if a.t == ValueType.STRUCT:
+        return Value.b(canon_val(a) == canon_val(b))
+    return Value.b(a.v == b.v)
 
 def widen(v):
-    # R-INT1: неограниченное целое -> double; за границей 2^53 — флаг lossy в журнал.
+    # R-INT1: неограниченное целое -> double. За границей 2^53 — флаг lossy в журнал.
     if v.t == ValueType.INT:
         x = float(v.v)
         lossy = abs(v.v) > 2**53
-        JOURNAL.append(f"widen {v.v} -> {_canon_float(x)}" + (" lossy=TRUE" if lossy else ""))
+        JOURNAL.append("widen " + str(v.v) + " -> " + _canon_float(x) + (" lossy=TRUE" if lossy else ""))
         return Value.f(x)
     if v.t == ValueType.FLOAT:
         return v
@@ -176,10 +172,6 @@ def not_(v):
     if v.t == ValueType.ERR: return v
     return Value.b(not bool(v.v))
 
-# Лексический захват: снимок окружения
-def make_closure(fn, env_snapshot):
-    return Value.clo(fn, env_snapshot)
-
 def apply_closure(v, arg):
     if v.t == ValueType.ERR: return v
     if v.t != ValueType.CLOSURE:
@@ -187,7 +179,6 @@ def apply_closure(v, arg):
     fn, env = v.v
     return fn(env, arg)
 
-# reduce: явный аккумулятор, шаги видны в trace
 def reduce_vec(vec_val, acc_val, step_fn):
     if vec_val.t == ValueType.ERR: return vec_val
     if acc_val.t == ValueType.ERR: return acc_val
@@ -196,7 +187,6 @@ def reduce_vec(vec_val, acc_val, step_fn):
         acc = step_fn(acc, Value.f(x))
     return acc
 
-# Статические проверки (SC-коды)
 def static_check(term, env_names):
     def walk(node, params):
         if isinstance(node, tuple):
@@ -205,16 +195,15 @@ def static_check(term, env_names):
                 _, name, body, nxt = node
                 return walk(body, params + [name]) and walk(nxt, params + [name])
             elif tag == "var":
-                return node[1] in params  # SC-002
+                return node[1] in params
             elif tag == "app":
                 return walk(node[1], params) and walk(node[2], params)
             elif tag == "if":
-                return (walk(node[1], params) and walk(node[2], params)
-                        and walk(node[3], params))
+                return walk(node[1], params) and walk(node[2], params) and walk(node[3], params)
             elif tag == "fun":
                 _, ps, body = node
                 if len(set(ps)) != len(ps):
-                    return False  # SC-060
+                    return False
                 return walk(body, params + ps)
             elif tag == "vec":
                 return all(walk(e, params) for e in node[1])
@@ -231,13 +220,13 @@ def static_check(term, env_names):
     return walk(term, [])
 
 # ============================================================
-# Trio Bridge: узлы
+# Trio Bridge: узлы. Диспетчер и маппинг значений.
 # ============================================================
 class NodeError(Exception):
     def __init__(self, code, message):
         self.code = code
         self.message = message
-        super().__init__(f"Err({code}): {message}")
+        super().__init__("Err(" + code + "): " + message)
 
 NODE_SPECS = {}
 
@@ -253,28 +242,28 @@ def load_manifest(path=None):
     return len(NODE_SPECS)
 
 def to_triomat_value(v, dtype="Float64", name="?"):
-    """SoundValue -> payload TRIOMAT. R-INT1 живёт здесь. Журнал входа — всегда."""
-    if v.t in (VT.INT, VT.FLOAT) and dtype == "Float64":
-        if v.t == VT.INT:
+    # SoundValue -> payload TRIOMAT. R-INT1 живёт здесь. Журнал входа — всегда.
+    if v.t in (ValueType.INT, ValueType.FLOAT) and dtype == "Float64":
+        if v.t == ValueType.INT:
             lossy = abs(v.v) > 2**53
             x = float(v.v)
         else:
             lossy, x = False, float(v.v)
-        JOURNAL.append(f"IN {name}[] = {_canon_float(x)}" + (" lossy=TRUE" if lossy else ""))
+        JOURNAL.append("IN " + name + "[] = " + _canon_float(x) + (" lossy=TRUE" if lossy else ""))
         return {"dtype": dtype, "shape": [], "values": [x], "lossy": lossy}
-    if v.t == VT.INT and dtype == "Int64":
-        JOURNAL.append(f"IN {name}[] = {int(v.v)}")
+    if v.t == ValueType.INT and dtype == "Int64":
+        JOURNAL.append("IN " + name + "[] = " + str(int(v.v)))
         return {"dtype": dtype, "shape": [], "values": [int(v.v)], "lossy": False}
-    if v.t == VT.VEC:
+    if v.t == ValueType.VEC:
         if v.v and isinstance(v.v[0], list):
             r, c = len(v.v), len(v.v[0])
             vals = [float(x) for row in v.v for x in row]
-            JOURNAL.append(f"IN {name} [{r},{c}] = " + " ".join(_canon_float(x) for x in vals))
+            JOURNAL.append("IN " + name + " [" + str(r) + "," + str(c) + "] = " + " ".join(_canon_float(x) for x in vals))
             return {"dtype": "Float64", "shape": [r, c], "values": vals, "lossy": False}
         vals = [float(x) for x in v.v]
-        JOURNAL.append(f"IN {name} [{len(vals)}] = " + " ".join(_canon_float(x) for x in vals))
+        JOURNAL.append("IN " + name + " [" + str(len(vals)) + "] = " + " ".join(_canon_float(x) for x in vals))
         return {"dtype": "Float64", "shape": [len(vals)], "values": vals, "lossy": False}
-    raise NodeError("TypeError", f'input "{name}": unsupported SoundValue/type combo')
+    raise NodeError("TypeError", 'input "' + name + '": unsupported SoundValue/type combo')
 
 def from_triomat_value(payload):
     shape, values = payload["shape"], payload["values"]
@@ -286,7 +275,7 @@ def from_triomat_value(payload):
     return Value.vec([values[i * c:(i + 1) * c] for i in range(r)])
 
 def octave_backend_emulated(spec, files, workdir="."):
-    # Эмуляция той же арифметики, что в run_mat_mul_scalar_octave.m
+    # Эмуляция той же арифметики, что в run_mat_mul_scalar_octave.m.
     if spec["name"] != "mat_mul_scalar_octave":
         raise NodeError("ProcessError", "unknown node for emulated backend")
     A, k = files["A"], files["k"]
@@ -299,7 +288,7 @@ def octave_backend_emulated(spec, files, workdir="."):
     return {"B": {"dtype": "Float64", "shape": [r, c], "values": B, "lossy": False}}
 
 def octave_backend_real(spec, files, workdir="."):
-    # OPEN-гейт: subprocess.run(["octave", "--no-gui", "--quiet", ...], cwd=workdir)
+    # OPEN-гейт: требует установленный Octave.
     raise NodeError("ProcessError", "real octave backend not wired yet (OPEN gate)")
 
 def run_node(spec, inputs, backend, workdir="."):
@@ -307,7 +296,7 @@ def run_node(spec, inputs, backend, workdir="."):
     for io in spec["inputs"]:
         name = io["name"]
         if name not in inputs:
-            return None, ("ShapeError", f'missing input "{name}"')
+            return None, ("ShapeError", 'missing input "' + name + '"')
         try:
             files[name] = to_triomat_value(inputs[name], io.get("dtype", "Float64"), name)
         except NodeError as e:
@@ -320,18 +309,19 @@ def run_node(spec, inputs, backend, workdir="."):
     for io in spec["outputs"]:
         name = io["name"]
         if name not in results:
-            return None, ("ProcessError", f'backend did not produce "{name}"')
+            return None, ("ProcessError", 'backend did not produce "' + name + '"')
         payload = results[name]
         if payload["dtype"] != io.get("dtype", "Float64"):
-            return None, ("TypeError", f'output "{name}": wrong dtype')
+            return None, ("TypeError", 'output "' + name + '": dtype=' + payload["dtype"] + ", expected " + io["dtype"])
         outs = from_triomat_value(payload)
         flat = ([x for row in outs.v for x in row] if outs.v and isinstance(outs.v[0], list)
                 else outs.v if isinstance(outs.v, list) else [outs.v])
-        JOURNAL.extend(f"OUT {name}[{i}] = {_canon_float(x)}" for i, x in enumerate(flat))
+        JOURNAL.extend("OUT " + name + "[" + str(i) + "] = " + _canon_float(x) for i, x in enumerate(flat))
         outputs[name] = outs
     return outputs, None
 
 def eval_node_call(name, args, backend=None):
+    # Ошибка приходит как Err(code) — как положено в SCore.
     spec = NODE_SPECS.get(name)
     if spec is None:
         return Value.err("NodeNotFound")
@@ -347,254 +337,313 @@ def eval_node_call(name, args, backend=None):
     return Value.vec([outputs[io["name"]] for io in spec["outputs"]])
 
 # ============================================================
-# Структурные типы: рекорды и сум-типы (T14)
+# Модели данных: рекорды и сум-типы (T14, T16)
 # ============================================================
 RECORD_REGISTRY = {}
-
-def canon_val(v):
-    if v.t == VT.STRUCT:
-        name, fields, _ = v.v
-        body = " ".join(f"{fn}={canon_val(fv)}" for fn, fv in fields)
-        return "{" + f"{name} {body}" + "}"
-    if v.t == VT.VEC:
-        return "[" + ",".join(canon_val(x) if isinstance(x, Value) else _canon_float(x)
-                              for x in v.v) + "]"
-    return v.canon()
-
-def struct_eq(a, b):
-    # Равенство ПОБИТОВОЕ по канону: -0.0 и 0.0 различаются.
-    if a.t != b.t:
-        return Value.b(False)
-    if a.t == VT.STRUCT:
-        (n1, f1, _), (n2, f2, _) = a.v, b.v
-        if n1 != n2 or len(f1) != len(f2):
-            return Value.b(False)
-        for (na, va), (nb, vb) in zip(f1, f2):
-            if na != nb:
-                return Value.b(False)
-            if canon_val(va) != canon_val(vb):
-                return Value.b(False)
-        return Value.b(True)
-    return Value.b(a.canon() == b.canon())
 
 class RecordType:
     def __init__(self, name, fields, invariants=None):
         self.name = name
-        self.fields = fields                # [(fname, kind)] — порядок из определения = канон
+        self.fields = [(f["name"], f["type"]) for f in fields] if fields and isinstance(fields[0], dict) else list(fields)
         self.invariants = invariants or []
-
     def construct(self, args):
-        extra = set(args) - {f[0] for f in self.fields}
+        names = [f[0] for f in self.fields]
+        extra = set(args) - set(names)
         if extra:
             return Value.err("UnknownField:" + ",".join(sorted(extra)))
-        checked, lossy = [], []
+        checked, lossy, by_name = [], {}, {}
         for fname, kind in self.fields:
             if fname not in args:
                 return Value.err("MissingField:" + fname)
             v = args[fname]
+            if v.t == ValueType.ERR:
+                return v
             if kind == "float":
-                if v.t == VT.INT:
-                    # R-INT1 в поле рекорда: журналируется, флаг не теряется (урок T13)
-                    lossy_flag = abs(v.v) > 2**53
-                    x = float(v.v)
-                    JOURNAL.append(f"STRUCT {self.name}.{fname} <- int {v.v} -> {_canon_float(x)}"
-                                   + (" lossy=TRUE" if lossy_flag else ""))
-                    v = Value.f(x)
-                    if lossy_flag:
-                        lossy.append(fname)
-                elif v.t != VT.FLOAT:
+                if v.t == ValueType.INT:
+                    if abs(v.v) > 2**53:
+                        lossy[fname] = True
+                        JOURNAL.append("STRUCT " + self.name + "." + fname + " <- int " + str(v.v)
+                                       + " -> " + _canon_float(float(v.v)) + " lossy=TRUE")
+                    v = Value.f(float(v.v))
+                elif v.t != ValueType.FLOAT:
                     return Value.err("TypeError:" + fname)
             elif kind == "int":
-                if v.t != VT.INT:
-                    return Value.err("TypeError:" + fname)
-            elif kind == "bool":
-                if v.t != VT.BOOL:
+                if v.t != ValueType.INT:
                     return Value.err("TypeError:" + fname)
             elif kind == "vec":
-                if v.t != VT.VEC:
+                if v.t != ValueType.VEC:
                     return Value.err("TypeError:" + fname)
-            checked.append((fname, v))
-        # Инварианты — предикаты из спеки, ошибки как значения
-        d = dict(checked)
-        for inv in self.invariants:
-            fname = inv.get("field")
-            val = d.get(fname)
-            if val is None:
-                continue
-            if val.t not in (VT.INT, VT.FLOAT):
+            elif kind.startswith("ref:"):
+                target = kind[4:]
+                if v.t != ValueType.STRUCT or v.v[0] != target:
+                    return Value.err("TypeError:" + fname)
+            else:
                 return Value.err("TypeError:" + fname)
-            x = float(val.v)
-            if "min" in inv and x < float(inv["min"]):
-                return Value.err("InvariantViolation:" + fname)
-            if "max" in inv and x > float(inv["max"]):
-                return Value.err("InvariantViolation:" + fname)
-        return Value(VT.STRUCT, (self.name, checked, lossy))
+            checked.append((fname, kind, v))
+            by_name[fname] = v
+        for inv in self.invariants:
+            field = inv["field"]
+            val = by_name.get(field)
+            if val is None or val.t != ValueType.FLOAT:
+                return Value.err("InvariantViolation:" + field)
+            if "min" in inv and val.v < inv["min"]:
+                return Value.err("InvariantViolation:" + field)
+            if "max" in inv and val.v > inv["max"]:
+                return Value.err("InvariantViolation:" + field)
+        return Value.struct(self.name, checked, lossy)
 
 class SumType:
     def __init__(self, name, variants):
         self.name = name
-        self.variants = variants            # [(tag, [(fname, kind)])]
+        self.order = [v["name"] for v in variants]
+        self.variants = {v["name"]: [(f["name"], f["type"]) for f in v["fields"]] for v in variants}
+    def construct(self, vname, args):
+        if vname not in self.variants:
+            return Value.err("UnknownVariant:" + vname)
+        rt = RecordType(vname, [{"name": fn, "type": ft} for fn, ft in self.variants[vname]])
+        return rt.construct(args)
+    def fingerprint(self):
+        parts = []
+        for vname in self.order:
+            fl = self.variants[vname]
+            parts.append(vname + "(" + ".".join(fn + ":" + ft for fn, ft in fl) + ")")
+        return self.name + "[" + "|".join(parts) + "]"
 
-    def construct(self, tag, args):
-        for t, fields in self.variants:
-            if t == tag:
-                rt = RecordType(f"{self.name}.{tag}", fields)
-                r = rt.construct(args)
-                if r.t == VT.STRUCT:
-                    _, checked, lossy = r.v
-                    return Value(VT.STRUCT, (f"{self.name}.{tag}", checked, lossy))
-                return r
-        return Value.err("UnknownVariant:" + tag)
+def type_fingerprint(name):
+    t = RECORD_REGISTRY.get(name)
+    if t is None:
+        return Value.err("UnknownType:" + name)
+    if isinstance(t, SumType):
+        return t.fingerprint()
+    return t.name + "(" + ".".join(fn + ":" + ft for fn, ft in t.fields) + ")"
 
-def match_area(v):
-    # Явная диспетчеризация по тегу — вместо виртуальных таблиц
-    if v.t == VT.STRUCT:
-        name, fields, _ = v.v
-        d = dict(fields)
-        if name == "Shape.Circle":
-            return mul(Value.f(_PI), mul(d["r"], d["r"]))
-        if name == "Shape.Rect":
-            return mul(d["w"], d["h"])
-        return Value.err("UnknownVariant:" + name.split(".")[-1])
-    return Value.err("TypeError")
+def generate_model(spec):
+    # Кодогенератор: спека -> конструкторы в реестре. Одинаковая спека -> одинаковый реестр.
+    if spec.get("format") != "TRIOMODEL1":
+        return Value.err("SpecError")
+    made = {}
+    for t in spec.get("types", []):
+        kind = t.get("kind")
+        if kind == "record":
+            for f in t["fields"]:
+                k = f["type"]
+                if k not in ("int", "float", "vec") and not (k.startswith("ref:") and len(k) > 4):
+                    return Value.err("SpecError")
+            rt = RecordType(t["name"], t["fields"], t.get("invariants"))
+            RECORD_REGISTRY[rt.name] = rt
+            made[rt.name] = rt
+        elif kind == "sum":
+            st = SumType(t["name"], t["variants"])
+            RECORD_REGISTRY[st.name] = st
+            made[st.name] = st
+        else:
+            return Value.err("SpecError")
+    return made
 
 # ============================================================
-# TRIOREC1: сериализация рекордов (T15)
+# TRIOREC1: плоские рекорды. Вложенные и ref — только TRIOREC2.
 # ============================================================
 def serialize_record(v):
-    if v.t != VT.STRUCT:
-        return None, ("SerializeError", "only structures can be serialized")
+    if v.t == ValueType.ERR: return Value.err("SerializeError")
+    if v.t != ValueType.STRUCT: return Value.err("SerializeError")
     name, fields, lossy = v.v
-    rt = RECORD_REGISTRY.get(name)
-    if rt is None:
-        return None, ("UnknownType:" + name, "type not in registry")
-    if not isinstance(rt, RecordType):
-        return None, ("SerializeError", "sum type variants serialize under their RecordType")
-    if [fn for fn, _ in fields] != [fn for fn, _ in rt.fields]:
-        return None, ("FieldMismatch", f"{name}: fields differ from spec")
+    reg = RECORD_REGISTRY.get(name)
+    if reg is None: return Value.err("UnknownType:" + name)
+    if not isinstance(reg, RecordType): return Value.err("FieldMismatch")
+    if [(f[0], f[1]) for f in fields] != [(f[0], f[1]) for f in reg.fields]:
+        return Value.err("FieldMismatch")
+    for fname, kind, val in fields:
+        if kind.startswith("ref:") or val.t == ValueType.STRUCT:
+            return Value.err("SerializeError")
     header = {"format": "TRIOREC1", "version": 1, "type": name,
-              "fields": [[fn, k] for fn, k in rt.fields], "lossy": sorted(lossy)}
+              "fields": [[f[0], f[1]] for f in fields],
+              "lossy": [k for k, flag in (lossy or {}).items() if flag]}
     lines = [json.dumps(header, separators=(",", ":"))]
-    for fn, fv in fields:
-        if fv.t == VT.ERR:
-            return None, ("SerializeError", f"field {fn} holds an error")
-        if fv.t in (VT.STRUCT, VT.VEC):
-            return None, (f"SerializeError", f"field {fn}: nested payload needs TRIOREC2 (OPEN gate)")
-        lines.append(fv.canon())
-    return "\n".join(lines), None
+    for fname, kind, val in fields:
+        if kind == "float": lines.append(_canon_float(val.v))
+        elif kind == "int": lines.append(str(val.v))
+        else: return Value.err("SerializeError")
+    return "\n".join(lines)
 
 def load_record(text):
+    lines = text.split("\n")
     try:
-        lines = text.strip().split("\n")
         header = json.loads(lines[0])
     except Exception:
-        return None, ("FormatError", "invalid TRIOREC1 header")
-    if header.get("format") != "TRIOREC1" or header.get("version") != 1:
-        return None, ("FormatError", "expected TRIOREC1 version 1")
-    rt = RECORD_REGISTRY.get(header.get("type"))
-    if rt is None:
-        return None, ("UnknownType:" + str(header.get("type")), "type not in registry")
-    if [fn for fn, _ in rt.fields] != [fn for fn, _ in header.get("fields", [])]:
-        return None, ("FieldMismatch", "header fields differ from registry")
-    vals = lines[1:]
-    if len(vals) != len(rt.fields):
-        return None, ("FieldMismatch", "payload arity differs from header")
-    lossy_set = set(header.get("lossy", []))
-    if not lossy_set <= {fn for fn, _ in rt.fields}:
-        return None, ("FieldMismatch", "lossy flag for unknown field")
-    checked = []
-    for (fn, kind), raw in zip(rt.fields, vals):
+        return Value.err("SerializeError")
+    if header.get("format") != "TRIOREC1": return Value.err("SerializeError")
+    reg = RECORD_REGISTRY.get(header.get("type"))
+    if reg is None: return Value.err("UnknownType:" + str(header.get("type")))
+    if not isinstance(reg, RecordType): return Value.err("FieldMismatch")
+    want = [[f[0], f[1]] for f in reg.fields]
+    if header.get("fields") != want: return Value.err("FieldMismatch")
+    fields, lossy = [], {}
+    for i, (fname, kind) in enumerate(want):
+        if 1 + i >= len(lines): return Value.err("FieldMismatch")
+        s = lines[1 + i]
         try:
             if kind == "float":
-                fv = Value.f(_parse_canon(raw))
+                fields.append((fname, kind, Value.f(parse_canon_float(s))))
             elif kind == "int":
-                fv = Value.i(int(raw))
-            elif kind == "bool":
-                fv = Value.b(raw == "true")
+                fields.append((fname, kind, Value.i(int(s))))
             else:
-                return None, ("SerializeError", f"field kind {kind} needs TRIOREC2")
-        except ValueError:
-            return None, ("FormatError", f"bad canon value for field {fn}")
-        checked.append((fn, fv))
-    return Value(VT.STRUCT, (header["type"], checked, sorted(lossy_set))), None
+                return Value.err("SerializeError")
+        except Exception:
+            return Value.err("FieldMismatch")
+    for lp in header.get("lossy", []):
+        lossy[lp] = True
+    return Value.struct(header["type"], fields, lossy)
 
 # ============================================================
-# Кодогенератор моделей предметных областей (T16)
+# TRIOREC2: вложенные рекорды и ref-поля. Ацикличны по построению,
+# глубина ограничена — защита от чужих данных.
 # ============================================================
-def generate_model(manifest):
-    """JSON-спека -> RecordType/SumType, зарегистрированные в реестре.
-    Порядок полей из спеки = канонический порядок сериализации.
-    Инварианты из спеки становятся проверками конструктора."""
-    if not isinstance(manifest, dict) or "types" not in manifest:
-        return None, ("SpecError", 'expected {"types": [...]}')
-    for t in manifest["types"]:
-        kind = t.get("kind", "record")
-        name = t.get("name")
-        if not name:
-            return None, ("SpecError", "type without name")
-        if kind == "record":
-            fields = [(f["name"], f.get("type", "float")) for f in t.get("fields", [])]
-            rt = RecordType(name, fields, t.get("invariants", []))
-        elif kind == "sum":
-            variants = [(v["name"],
-                         [(f["name"], f.get("type", "float")) for f in v.get("fields", [])])
-                        for v in t.get("variants", [])]
-            rt = SumType(name, variants)
+MAX_DEPTH = 64
+
+def _lossy_paths(v, prefix=""):
+    # Пути флагов потери: "pod.capacity" — для агрегации в заголовке верхнего уровня.
+    name, fields, lossy = v.v
+    out = []
+    for fname, kind, val in fields:
+        p = prefix + fname
+        if (lossy or {}).get(fname):
+            out.append(p)
+        if kind.startswith("ref:") and val.t == ValueType.STRUCT:
+            out.extend(_lossy_paths(val, p + "."))
+    return out
+
+def _serialize2_body(v, depth):
+    if depth > MAX_DEPTH:
+        return "ERR:CycleDetected"
+    name, fields, lossy = v.v
+    header = {"format": "TRIOREC2", "version": 2, "type": name,
+              "fields": [[f[0], f[1]] for f in fields],
+              "lossy": _lossy_paths(v)}
+    lines = [json.dumps(header, separators=(",", ":"))]
+    for fname, kind, val in fields:
+        if kind.startswith("ref:"):
+            lines.append("@begin " + fname + ":" + kind[4:])
+            sub = _serialize2_body(val, depth + 1)
+            if sub.startswith("ERR:"):
+                return sub
+            lines.append(sub)
+            lines.append("@end " + fname)
+        elif kind == "float":
+            lines.append(_canon_float(val.v))
+        elif kind == "int":
+            lines.append(str(val.v))
         else:
-            return None, ("SpecError", f"unknown kind: {kind}")
-        RECORD_REGISTRY[name] = rt
-    return len(RECORD_REGISTRY), None
+            return "ERR:SerializeError"
+    return "\n".join(lines)
 
-def registry_canon():
-    """Отпечаток реестра: одинаковые спеки -> одинаковый отпечаток (golden для кодогена)."""
-    parts = []
-    for name in sorted(RECORD_REGISTRY):
-        rt = RECORD_REGISTRY[name]
-        if isinstance(rt, RecordType):
-            fs = ".".join(f"{fn}:{k}" for fn, k in rt.fields)
-            parts.append(f"{name}({fs})")
-        else:
-            vs = "|".join(f"{tag}({'.'.join(f'{fn}:{k}' for fn, k in f)})"
-                          for tag, f in rt.variants)
-            parts.append(f"{name}[{vs}]")
-    return "|".join(parts)
+def serialize_record2(v):
+    if v.t == ValueType.ERR: return Value.err("SerializeError")
+    if v.t != ValueType.STRUCT: return Value.err("SerializeError")
+    name = v.v[0]
+    reg = RECORD_REGISTRY.get(name)
+    if reg is None: return Value.err("UnknownType:" + name)
+    if not isinstance(reg, RecordType): return Value.err("FieldMismatch")
+    if [(f[0], f[1]) for f in v.v[1]] != [(f[0], f[1]) for f in reg.fields]:
+        return Value.err("FieldMismatch")
+    body = _serialize2_body(v, 0)
+    if body == "ERR:CycleDetected": return Value.err("CycleDetected")
+    if body is None or body.startswith("ERR:"): return Value.err("SerializeError")
+    return body
+
+def load_record2(text):
+    lines = text.split("\n")
+    idx = [0]
+    def parse_block():
+        try:
+            header = json.loads(lines[idx[0]])
+        except Exception:
+            return ("ERR", "SerializeError")
+        idx[0] += 1
+        if header.get("format") != "TRIOREC2":
+            return ("ERR", "SerializeError")
+        tname = header.get("type")
+        reg = RECORD_REGISTRY.get(tname)
+        if reg is None: return ("ERR", "UnknownType:" + str(tname))
+        if not isinstance(reg, RecordType): return ("ERR", "FieldMismatch")
+        want = [[f[0], f[1]] for f in reg.fields]
+        if header.get("fields") != want: return ("ERR", "FieldMismatch")
+        fields, lossy = [], {}
+        for fname, kind in want:
+            if idx[0] >= len(lines): return ("ERR", "FieldMismatch")
+            s = lines[idx[0]]
+            if kind.startswith("ref:"):
+                if s != "@begin " + fname + ":" + kind[4:]:
+                    return ("ERR", "FieldMismatch")
+                idx[0] += 1
+                sub = parse_block()
+                if isinstance(sub, tuple): return sub
+                if idx[0] >= len(lines) or lines[idx[0]] != "@end " + fname:
+                    return ("ERR", "FieldMismatch")
+                idx[0] += 1
+                fields.append((fname, kind, sub))
+            elif kind == "float":
+                try:
+                    fields.append((fname, kind, Value.f(parse_canon_float(s))))
+                except Exception:
+                    return ("ERR", "FieldMismatch")
+                idx[0] += 1
+            elif kind == "int":
+                try:
+                    fields.append((fname, kind, Value.i(int(s))))
+                except Exception:
+                    return ("ERR", "FieldMismatch")
+                idx[0] += 1
+            else:
+                return ("ERR", "FieldMismatch")
+        # plain-имена потери — свои; пути с точками — агрегаты, они живут во вложенных заголовках
+        for lp in header.get("lossy", []):
+            if "." not in lp:
+                lossy[lp] = True
+        return Value.struct(tname, fields, lossy)
+    res = parse_block()
+    if isinstance(res, tuple):
+        return Value.err(res[1])
+    if idx[0] != len(lines):
+        return Value.err("FieldMismatch")
+    return res
 
 # ============================================================
-# Батарея (89 в полной версии; здесь — 8 реализованных)
+# Батарея тестов (89 в полной версии; здесь — 9 реализованных)
 # ============================================================
 def run_battery():
     tests_passed = 0
     tests_total = 89
 
-    # T06: лексический захват (FIX-1)
+    # T06: лексический захват (FIX-1: замыкание через apply_closure)
     def mk_f(env_snap):
         def fn(clo_env, y):
-            return add(clo_env["x1"], y)   # снимок на момент создания замыкания
+            return add(clo_env["x1"], y)
         return Value.clo(fn, env_snap)
     env1 = {"x1": Value.i(105), "f": mk_f({"x1": Value.i(1)})}
-    res = apply_closure(env1["f"], Value.i(5))
-    if res.canon() == "6":
+    if apply_closure(env1["f"], Value.i(5)).canon() == "6":
         tests_passed += 1
 
     # T07: reduce с шагами
     def step(acc, x):
         return add(acc, x)
     r = reduce_vec(Value.vec([1.0, 2.0, 3.0, 4.0]), Value.i(0), step)
-    if r.canon() == "0x1.4000000000000p+3":  # 10.0
+    if r.canon() == "0x1.4000000000000p+3":
         tests_passed += 1
 
-    # T11: narrow с ошибкой (FIX-2)
+    # T11: narrow с ошибкой (FIX-2: теперь по смыслу, а не случайно)
     if narrow(Value.f(3.5)).canon() == "Err(PrecisionLoss)":
         tests_passed += 1
 
     # T12: R-INT1 ties-to-even на границе 2^53
-    cases = ((2**53,     "0x1.0000000000000p+53", False),
+    # 2^53+3 лежит ровно посередине между 2^53+2 и 2^53+4: ties-to-even
+    # поднимает к чётной мантиссе (...2). Обрубание дало бы (...1).
+    cases = ((2**53, "0x1.0000000000000p+53", False),
              (2**53 + 2, "0x1.0000000000001p+53", True),
              (2**53 + 3, "0x1.0000000000002p+53", True))
     for x, want, want_lossy in cases:
         JOURNAL.clear()
         w = widen(Value.i(x))
-        if w.t != VT.FLOAT or _canon_float(w.v) != want:
+        if w.t != ValueType.FLOAT or _canon_float(w.v) != want:
             break
         entry = next((e for e in JOURNAL if e.startswith("widen")), "")
         if ("lossy=TRUE" in entry) != want_lossy:
@@ -602,26 +651,21 @@ def run_battery():
     else:
         tests_passed += 1
 
-    # T13: мост узлов — рабочий путь, путь ошибки, R-INT1 на входе
-    if "mat_mul_scalar_octave" not in NODE_SPECS:
-        NODE_SPECS["mat_mul_scalar_octave"] = {
-            "name": "mat_mul_scalar_octave",
-            "backend": "octave",
-            "inputs": [
-                {"name": "A", "type": "matrix", "dtype": "Float64"},
-                {"name": "k", "type": "scalar", "dtype": "Float64"},
-            ],
-            "outputs": [{"name": "B", "type": "matrix", "dtype": "Float64"}],
-        }
+    # T13: мост узлов — рабочий путь, путь ошибки, R-INT1 на входе узла
+    NODE_SPECS.setdefault("mat_mul_scalar_octave", {
+        "name": "mat_mul_scalar_octave", "backend": "octave",
+        "inputs": [{"name": "A", "type": "matrix", "dtype": "Float64"},
+                   {"name": "k", "type": "scalar", "dtype": "Float64"}],
+        "outputs": [{"name": "B", "type": "matrix", "dtype": "Float64"}]})
     JOURNAL.clear()
     r = eval_node_call("mat_mul_scalar_octave",
                        [Value.vec([[1.0, 2.0], [3.0, 4.0]]), Value.f(2.0)])
-    ok13 = (r.t == VT.VEC and r.v == [[2.0, 4.0], [6.0, 8.0]]
+    ok13 = (r.t == ValueType.VEC and r.v == [[2.0, 4.0], [6.0, 8.0]]
             and "OUT B[3] = 0x1.0000000000000p+3" in JOURNAL)
     JOURNAL.clear()
     r2 = eval_node_call("mat_mul_scalar_octave",
                         [Value.vec([[1.0, 2.0], [3.0, 4.0]]), Value.vec([1.0])])
-    ok13 = ok13 and r2.t == VT.ERR and r2.v == "ShapeError"
+    ok13 = ok13 and r2.t == ValueType.ERR and r2.v == "ShapeError"
     ok13 = ok13 and any(e.startswith("IN A [2,2]") for e in JOURNAL)
     JOURNAL.clear()
     eval_node_call("mat_mul_scalar_octave", [Value.vec([[1.0]]), Value.i(2**53 + 1)])
@@ -629,127 +673,138 @@ def run_battery():
     if ok13:
         tests_passed += 1
 
-    # T14: рекорды, сум-типы, побитовое равенство
-    P = RecordType("Point", [("x", "float"), ("y", "float")])
-    p1 = P.construct({"x": Value.f(1.5), "y": Value.i(2)})
-    ok14 = p1.t == VT.STRUCT
-    ok14 = ok14 and canon_val(p1) == "{Point x=0x1.8000000000000p+0 y=0x1.0000000000000p+1}"
-    p2 = P.construct({"y": Value.i(2), "x": Value.f(1.5)})   # порядок аргументов не важен
-    ok14 = ok14 and struct_eq(p1, p2).canon() == "true"
-    pa = P.construct({"x": Value.f(-0.0), "y": Value.f(0.0)})
-    pb = P.construct({"x": Value.f(0.0), "y": Value.f(0.0)})
-    ok14 = ok14 and struct_eq(pa, pb).canon() == "false"     # -0.0 != 0.0 побитово
-    ok14 = ok14 and P.construct({"x": Value.f(1.0), "y": Value.i(2), "z": Value.i(3)}).canon() == "Err(UnknownField:z)"
-    ok14 = ok14 and P.construct({"x": Value.f(1.0)}).canon() == "Err(MissingField:y)"
-    ok14 = ok14 and P.construct({"x": Value.b(True), "y": Value.i(2)}).canon() == "Err(TypeError:x)"
+    # T14: рекорды и сум-типы
+    RECORD_REGISTRY["Point"] = RecordType("Point", [{"name": "x", "type": "float"},
+                                                     {"name": "y", "type": "float"}])
+    RECORD_REGISTRY["Shape"] = SumType("Shape", [
+        {"name": "Circle", "fields": [{"name": "r", "type": "float"}]},
+        {"name": "Rect", "fields": [{"name": "w", "type": "float"},
+                                    {"name": "h", "type": "float"}]}])
+    p1 = RECORD_REGISTRY["Point"].construct({"x": Value.f(1.5), "y": Value.i(2)})
+    ok14 = p1.t == ValueType.STRUCT and canon_val(p1) == "{Point x=0x1.8000000000000p+0 y=0x1.0000000000000p+1}"
+    p2 = RECORD_REGISTRY["Point"].construct({"x": Value.f(1.5), "y": Value.i(2)})
+    ok14 = ok14 and struct_eq(p1, p2).v is True
+    pn = RECORD_REGISTRY["Point"].construct({"x": Value.f(-0.0), "y": Value.f(0.0)})
+    ok14 = ok14 and struct_eq(pn, RECORD_REGISTRY["Point"].construct({"x": Value.f(0.0), "y": Value.f(0.0)})).v is False
+    ok14 = ok14 and RECORD_REGISTRY["Point"].construct({"x": Value.f(1.0), "z": Value.f(2.0)}).v == "UnknownField:z"
+    ok14 = ok14 and RECORD_REGISTRY["Point"].construct({"x": Value.f(1.0)}).v == "MissingField:y"
+    ok14 = ok14 and RECORD_REGISTRY["Point"].construct({"x": Value.vec([1.0]), "y": Value.f(2.0)}).v == "TypeError:x"
     JOURNAL.clear()
-    pc = P.construct({"x": Value.i(2**53 + 1), "y": Value.f(0.0)})
-    ok14 = ok14 and pc.v[2] == ["x"]
-    ok14 = ok14 and any(e.startswith("STRUCT Point.x") and "lossy=TRUE" in e for e in JOURNAL)
-    Shape = SumType("Shape", [("Circle", [("r", "float")]),
-                              ("Rect", [("w", "float"), ("h", "float")])])
-    cir = Shape.construct("Circle", {"r": Value.f(2.0)})
-    ok14 = ok14 and match_area(cir).canon() == "0x1.921fb54442d18p+3"
-    rec = Shape.construct("Rect", {"w": Value.f(3.0), "h": Value.f(2.0)})
-    ok14 = ok14 and match_area(rec).canon() == "0x1.8000000000000p+2"
-    tri = Shape.construct("Triangle", {"r": Value.f(1.0)})
-    ok14 = ok14 and tri.canon() == "Err(UnknownVariant:Triangle)"
-    ok14 = ok14 and _PI.hex() == "0x1.921fb54442d18p+1"      # пин pi
-    ok14 = ok14 and canon_val(p1) == canon_val(P.construct({"x": Value.f(1.5), "y": Value.i(2)}))
+    RECORD_REGISTRY["Point"].construct({"x": Value.i(2**53 + 1), "y": Value.f(0.0)})
+    ok14 = ok14 and any(e.startswith("STRUCT Point.x <- int ") and "lossy=TRUE" in e for e in JOURNAL)
+    _PI = float.fromhex("0x1.921fb54442d18p+1")
+    circ = RECORD_REGISTRY["Shape"].construct("Circle", {"r": Value.f(2.0)})
+    area_c = mul(Value.f(_PI), mul(circ.v[1][0][2], circ.v[1][0][2]))
+    ok14 = ok14 and _canon_float(area_c.v) == "0x1.921fb54442d18p+3"
+    rect = RECORD_REGISTRY["Shape"].construct("Rect", {"w": Value.f(2.0), "h": Value.f(3.0)})
+    area_r = mul(rect.v[1][0][2], rect.v[1][1][2])
+    ok14 = ok14 and _canon_float(area_r.v) == "0x1.8000000000000p+2"
+    ok14 = ok14 and RECORD_REGISTRY["Shape"].construct("Triangle", {}).v == "UnknownVariant:Triangle"
+    def match_area(sval):
+        name = sval.v[0]
+        d = {f[0]: f[2] for f in sval.v[1]}
+        if name == "Circle":
+            return mul(Value.f(_PI), mul(d["r"], d["r"]))
+        if name == "Rect":
+            return mul(d["w"], d["h"])
+        return Value.err("UnknownVariant:" + name)
+    ok14 = ok14 and _canon_float(match_area(circ).v) == "0x1.921fb54442d18p+3"
+    ok14 = ok14 and canon_val(circ) == canon_val(RECORD_REGISTRY["Shape"].construct("Circle", {"r": Value.f(2.0)}))
     if ok14:
         tests_passed += 1
 
-    # T15: TRIOREC1
-    RECORD_REGISTRY["Point"] = RecordType("Point", [("x", "float"), ("y", "float")])
-    p1 = Value.struct("Point", [("x", Value.f(1.5)), ("y", Value.f(2.0))])
-    s1, e1 = serialize_record(p1)
-    ok15 = e1 is None
-    l1, e2 = load_record(s1)
-    ok15 = ok15 and e2 is None and struct_eq(l1, p1).canon() == "true"
-    s2, _ = serialize_record(p1)
-    ok15 = ok15 and s2 == s1                                  # детерминизм файлов
-    pm = Value.struct("Point", [("x", Value.f(-0.0)), ("y", Value.f(0.0))])
-    sm, em = serialize_record(pm)
-    ok15 = ok15 and em is None and "-0.0\n" in sm             # минус ноль едет как есть
-    lmp, em2 = load_record(sm)
-    ok15 = ok15 and em2 is None and struct_eq(lmp, pm).canon() == "true"
-    ok15 = ok15 and struct_eq(lmp, Value.struct("Point", [("x", Value.f(0.0)), ("y", Value.f(0.0))])).canon() == "false"
+    # T15: TRIOREC1 — roundtrip, детерминизм, lossy, ошибки
+    p = RECORD_REGISTRY["Point"].construct({"x": Value.f(1.5), "y": Value.f(2.0)})
+    txt = serialize_record(p)
+    ok15 = not isinstance(txt, Value) and '"format":"TRIOREC1"' in txt
+    back = load_record(txt)
+    ok15 = ok15 and struct_eq(p, back).v is True
+    txt2 = serialize_record(RECORD_REGISTRY["Point"].construct({"x": Value.f(1.5), "y": Value.f(2.0)}))
+    ok15 = ok15 and txt == txt2
+    pm = RECORD_REGISTRY["Point"].construct({"x": Value.f(-0.0), "y": Value.f(1.0)})
+    backm = load_record(serialize_record(pm))
+    ok15 = ok15 and struct_eq(backm, RECORD_REGISTRY["Point"].construct({"x": Value.f(0.0), "y": Value.f(1.0)})).v is False
     pl = RECORD_REGISTRY["Point"].construct({"x": Value.i(2**53 + 3), "y": Value.f(0.0)})
-    sl, el = serialize_record(pl)
-    ok15 = ok15 and el is None and '"lossy":["x"]' in sl
-    ll, el2 = load_record(sl)
-    ok15 = ok15 and el2 is None and ll.v[2] == ["x"]          # флаг возвращается из файла
-    tri_s = Value.struct("Triangle", [("a", Value.f(1.0))])
-    ok15 = ok15 and serialize_record(tri_s)[1][0] == "UnknownType:Triangle"
-    ok15 = ok15 and serialize_record(Value.i(1))[1][0] == "SerializeError"
-    bad = Value.struct("Point", [("x", Value.f(1.0))])
-    ok15 = ok15 and serialize_record(bad)[1][0] == "FieldMismatch"
+    txtl = serialize_record(pl)
+    ok15 = ok15 and '"lossy":["x"]' in txtl
+    ok15 = ok15 and (load_record(txtl).v[2].get("x") is True)
+    ok15 = ok15 and load_record(txt.replace("Point", "Ghost")).v == "UnknownType:Ghost"
+    ok15 = ok15 and serialize_record(Value.err("X")).v == "SerializeError"
     if ok15:
         tests_passed += 1
 
-    # T16: кодогенератор моделей из JSON-спеки
-    def dolphin_spec():
-        return {
-            "format": "TRIOMODEL1",
-            "types": [
-                {"kind": "record", "name": "Dolphin",
-                 "fields": [{"name": "id", "type": "int"},
-                            {"name": "score", "type": "float"}],
-                 "invariants": [{"field": "score", "min": 0.0, "max": 100.0}]},
-                {"kind": "record", "name": "Pod",
-                 "fields": [{"name": "capacity", "type": "float"}]},
-                {"kind": "sum", "name": "Shape",
-                 "variants": [
-                     {"name": "Circle", "fields": [{"name": "r", "type": "float"}]},
-                     {"name": "Rect", "fields": [{"name": "w", "type": "float"},
-                                                 {"name": "h", "type": "float"}]},
-                 ]},
-            ],
-        }
-
-    generate_model(dolphin_spec())
-    canon_a = registry_canon()
-    generate_model(dolphin_spec())
-    ok16 = canon_a == registry_canon()                        # два прогона — идентичный реестр
-    ok16 = ok16 and "Dolphin(id:int.score:float)" in canon_a
-    ok16 = ok16 and "Shape[Circle(r:float)|Rect(w:float.h:float)]" in canon_a
-
-    D = RECORD_REGISTRY["Dolphin"]
-    d1 = D.construct({"id": Value.i(7), "score": Value.f(0.98)})
-    ok16 = ok16 and d1.t == VT.STRUCT
-    ok16 = ok16 and canon_val(d1) == "{Dolphin id=7 score=%s}" % _canon_float(0.98)
-    # инвариант из спеки -> ошибка как значение
-    ok16 = ok16 and D.construct({"id": Value.i(7), "score": Value.f(150.0)}).canon() == "Err(InvariantViolation:score)"
-    ok16 = ok16 and D.construct({"id": Value.i(7), "score": Value.f(100.0)}).t == VT.STRUCT  # граница включена
-    # R-INT1 на поле сгенерированного типа без инвариантов
-    # (у Dolphin.score стоит инвариант max=100 — модель честно отсекает 2^53+3 ДО потери точности)
+    # T16: кодогенератор моделей
+    spec = {"format": "TRIOMODEL1", "types": [
+        {"kind": "record", "name": "Dolphin",
+         "fields": [{"name": "id", "type": "int"}, {"name": "score", "type": "float"}],
+         "invariants": [{"field": "score", "min": 0.0, "max": 100.0}]},
+        {"kind": "record", "name": "Pod", "fields": [{"name": "capacity", "type": "float"}]},
+        {"kind": "sum", "name": "Shape2",
+         "variants": [{"name": "Circle", "fields": [{"name": "r", "type": "float"}]},
+                      {"name": "Rect", "fields": [{"name": "w", "type": "float"},
+                                                  {"name": "h", "type": "float"}]}]}]}
+    g1 = generate_model(spec)
+    g2 = generate_model(spec)
+    fp1 = [type_fingerprint(n) for n in ("Dolphin", "Pod", "Shape2")]
+    fp2 = [type_fingerprint(n) for n in ("Dolphin", "Pod", "Shape2")]
+    ok16 = fp1 == fp2 and fp1[0] == "Dolphin(id:int.score:float)"
+    ok16 = ok16 and fp1[2] == "Shape2[Circle(r:float)|Rect(w:float.h:float)]"
+    d = g1["Dolphin"].construct({"id": Value.i(7), "score": Value.f(0.98)})
+    ok16 = ok16 and canon_val(d) == "{Dolphin id=7 score=0x1.f5c28f5c28f5cp-1}"
+    ok16 = ok16 and g1["Dolphin"].construct({"id": Value.i(1), "score": Value.f(150.0)}).v == "InvariantViolation:score"
+    ok16 = ok16 and g1["Dolphin"].construct({"id": Value.i(1), "score": Value.f(100.0)}).t == ValueType.STRUCT
+    ok16 = ok16 and g1["Dolphin"].construct({"id": Value.i(1), "score": Value.f(-0.5)}).v == "InvariantViolation:score"
     JOURNAL.clear()
-    Pod = RECORD_REGISTRY["Pod"]
-    d3 = Pod.construct({"capacity": Value.i(2**53 + 3)})
-    ok16 = ok16 and d3.t == VT.STRUCT and d3.v[2] == ["capacity"]
-    ok16 = ok16 and any(e.startswith("STRUCT Pod.capacity") and "lossy=TRUE" in e for e in JOURNAL)
-    ok16 = ok16 and "Pod(capacity:float)" in canon_a
-    # Err-пути конструктора
-    ok16 = ok16 and D.construct({"id": Value.i(1)}).canon() == "Err(MissingField:score)"
-    ok16 = ok16 and D.construct({"id": Value.i(1), "score": Value.f(1.0), "w": Value.i(2)}).canon() == "Err(UnknownField:w)"
-    ok16 = ok16 and D.construct({"id": Value.f(1.5), "score": Value.f(1.0)}).canon() == "Err(TypeError:id)"
-    # сум-тип из спеки + диспетчеризация
-    S = RECORD_REGISTRY["Shape"]
-    c1 = S.construct("Circle", {"r": Value.f(2.0)})
-    ok16 = ok16 and canon_val(c1) == "{Shape.Circle r=0x1.0000000000000p+1}"
-    ok16 = ok16 and S.construct("Triangle", {"r": Value.f(1.0)}).canon() == "Err(UnknownVariant:Triangle)"
-    ok16 = ok16 and match_area(c1).canon() == "0x1.921fb54442d18p+3"
-    # roundtrip сгенерированного типа + lossy персистится
-    sd, ed = serialize_record(d3)
-    ok16 = ok16 and ed is None and '"lossy":["capacity"]' in sd
-    ld, ed2 = load_record(sd)
-    ok16 = ok16 and ed2 is None and struct_eq(ld, d3).canon() == "true"
-    sd2, _ = serialize_record(d3)
-    ok16 = ok16 and sd2 == sd                                 # детерминизм кодогена
+    g1["Pod"].construct({"capacity": Value.i(2**53 + 3)})
+    ok16 = ok16 and any(e.startswith("STRUCT Pod.capacity <- int ") and "lossy=TRUE" in e for e in JOURNAL)
+    ok16 = ok16 and g1["Dolphin"].construct({"id": Value.i(1)}).v == "MissingField:score"
+    ok16 = ok16 and g1["Dolphin"].construct({"id": Value.i(1), "score": Value.f(1.0), "x": Value.f(1.0)}).v == "UnknownField:x"
+    ok16 = ok16 and g1["Dolphin"].construct({"id": Value.f(1.0), "score": Value.f(1.0)}).v == "TypeError:id"
+    ok16 = ok16 and generate_model({"format": "TRIOMODEL1", "types": [{"kind": "weird", "name": "X"}]}).v == "SpecError"
     if ok16:
         tests_passed += 1
 
-    print(f"Battery: {tests_passed}/{tests_total}")
+    # T17: TRIOREC2 — вложенные рекорды, ref-поля, глубина, агрегация lossy
+    gen = generate_model({"format": "TRIOMODEL1", "types": [
+        {"kind": "record", "name": "Pod2", "fields": [{"name": "capacity", "type": "float"}]},
+        {"kind": "record", "name": "Dolphin2", "fields": [
+            {"name": "id", "type": "int"}, {"name": "score", "type": "float"},
+            {"name": "pod", "type": "ref:Pod2"}]}]})
+    ok17 = isinstance(gen, dict) and "Dolphin2" in gen
+    pod = gen["Pod2"].construct({"capacity": Value.f(20.0)})
+    dol = gen["Dolphin2"].construct({"id": Value.i(7), "score": Value.f(0.98), "pod": pod})
+    ok17 = ok17 and dol.t == ValueType.STRUCT
+    txt = serialize_record2(dol)
+    ok17 = ok17 and not isinstance(txt, Value)
+    ok17 = ok17 and "@begin pod:Pod2" in txt and '"format":"TRIOREC2"' in txt
+    back = load_record2(txt)
+    ok17 = ok17 and back.t != ValueType.ERR and struct_eq(dol, back).v is True
+    txt_b = serialize_record2(gen["Dolphin2"].construct({"id": Value.i(7), "score": Value.f(0.98), "pod": pod}))
+    ok17 = ok17 and txt == txt_b  # детерминизм сериализации
+    # lossy из вложенного рекорда агрегируется в заголовок верхнего уровня
+    podl = gen["Pod2"].construct({"capacity": Value.i(2**53 + 3)})
+    doll = gen["Dolphin2"].construct({"id": Value.i(1), "score": Value.f(0.5), "pod": podl})
+    txtl = serialize_record2(doll)
+    ok17 = ok17 and not isinstance(txtl, Value) and '"lossy":["pod.capacity"]' in txtl
+    ok17 = ok17 and '"lossy":["capacity"]' in txtl  # вложенный блок несёт свой флаг
+    backl = load_record2(txtl)
+    ok17 = ok17 and backl.t != ValueType.ERR and backl.v[2].get("pod") is None and struct_eq(doll, backl).v is True
+    # ref с чужим типом -> TypeError
+    pt = RECORD_REGISTRY["Point"].construct({"x": Value.f(1.0), "y": Value.f(2.0)})
+    rbad = gen["Dolphin2"].construct({"id": Value.i(1), "score": Value.f(0.5), "pod": pt})
+    ok17 = ok17 and rbad.v == "TypeError:pod"
+    # неизвестный тип во вложенном блоке при загрузке
+    # подменяем тип только во вложенном заголовке: поле ref:Pod2 в верхнем — валидно,
+    # и FileMismatch должен наступить позже, а UnknownType:Ghost — внутри вложенного блока
+    ok17 = ok17 and load_record2(txt.replace('"type":"Pod2"', '"type":"Ghost"')).v == "UnknownType:Ghost"
+    # TRIOREC1 честно отказывается от ref-полей
+    ok17 = ok17 and serialize_record(dol).v == "SerializeError"
+    # глубинный страж (белый ящик): защита от чужих зацикленных данных
+    ok17 = ok17 and _serialize2_body(dol, 200) == "ERR:CycleDetected"
+    if ok17:
+        tests_passed += 1
+
+    print("Battery: " + str(tests_passed) + "/" + str(tests_total))
     return tests_passed == tests_total
 
 if __name__ == "__main__":
