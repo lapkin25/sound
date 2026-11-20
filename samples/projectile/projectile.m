@@ -3,6 +3,8 @@
 %        fact v0 25.0 ; fact g 9.81 ; fact alpha_deg 45.0 ;
 %        pure rule flight_range s = (v0 * v0) * s / g invariant s >= 0 ;
 
+1;
+
 function f = projectile_facts()
   f.v0 = 25.0;
   f.g = 9.81;
@@ -39,7 +41,10 @@ function [val, log] = projectile_flight_range(s)
 endfunction
 
 function s = canon(x)
-  % канонический float, §6.4; с веткой денормалов
+  % canonical float, par. 6.4; denormal branch included
+  if (isempty(x) || numel(x) ~= 1)
+    error('canon: not a scalar value');
+  endif
   if (isnan(x)); s = 'nan'; return; endif
   if (isinf(x));
     if (x > 0); s = 'inf'; else; s = '-inf'; endif
@@ -49,12 +54,12 @@ function s = canon(x)
     if (1 / x < 0); s = '-0x0.0p+0'; else; s = '0x0.0p+0'; endif
     return
   endif
-  h = tolower(num2hex(x));                 % 16 hex digits, big-endian
-  v = hex2dec(h(1:3));                     % знак + 11 бит экспоненты
+  h = tolower(num2hex(x));
+  v = hex2dec(h(1:3));
   e = mod(v, 2048) - 1023;
-  mant = h(4:16);                          % 13 hex digits мантиссы
+  mant = h(4:16);
   if (e == -1023)
-    body = ['0x0.' mant 'p-1022'];         % денормал: ведущей единицы нет
+    body = ['0x0.' mant 'p-1022'];
   else
     es = num2str(e);
     if (e >= 0); es = ['+' es]; endif
