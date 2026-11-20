@@ -1,0 +1,328 @@
+{
+  "format": "sound-stage2-fixtures-1",
+  "spec_source": "spec stage2 ;\n\nfact v0 25.0 ;\nfact g 9.81 ;\nfact alpha_deg 45.0 ;\n\nwire sin2a -> flight_range : Matrix[1,1] ;\nwire sin2a -> hypotenuse : Matrix[1,1] ;\nwire sin2a -> assoc_probe : Matrix[1,1] ;\nwire sin2a -> inv_probe : Matrix[1,1] ;\n\npure rule flight_range s = (v0 * v0) * s / g invariant s >= 0 ;\npure rule hypotenuse c = (c * c) + (c * c) ;\npure rule assoc_probe x = x / 2.0 / 4.0 ;\npure rule inv_probe x = 1.0 / x ;\n",
+  "trees": {
+    "flight_range": {
+      "op": "*",
+      "l": {
+        "op": "*",
+        "l": {
+          "name": "v0"
+        },
+        "r": {
+          "name": "v0"
+        }
+      },
+      "r": {
+        "op": "/",
+        "l": {
+          "name": "s"
+        },
+        "r": {
+          "name": "g"
+        }
+      }
+    },
+    "hypotenuse": {
+      "op": "+",
+      "l": {
+        "op": "*",
+        "l": {
+          "name": "c"
+        },
+        "r": {
+          "name": "c"
+        }
+      },
+      "r": {
+        "op": "*",
+        "l": {
+          "name": "c"
+        },
+        "r": {
+          "name": "c"
+        }
+      }
+    },
+    "assoc_probe": {
+      "op": "/",
+      "l": {
+        "name": "x"
+      },
+      "r": {
+        "op": "/",
+        "l": {
+          "num": 2.0
+        },
+        "r": {
+          "num": 4.0
+        }
+      }
+    },
+    "inv_probe": {
+      "op": "/",
+      "l": {
+        "num": 1.0
+      },
+      "r": {
+        "name": "x"
+      }
+    }
+  },
+  "journal_vectors": [
+    {
+      "name": "flight-45",
+      "rule": "flight_range",
+      "args": {
+        "s": 1.0
+      },
+      "tree": {
+        "op": "*",
+        "l": {
+          "op": "*",
+          "l": {
+            "name": "v0"
+          },
+          "r": {
+            "name": "v0"
+          }
+        },
+        "r": {
+          "op": "/",
+          "l": {
+            "name": "s"
+          },
+          "r": {
+            "name": "g"
+          }
+        }
+      },
+      "expect_log": [
+        "bind s  = Float64 0x1.0000000000000p+0",
+        "bind t0 = Float64 0x1.3880000000000p+9",
+        "bind t1 = Float64 0x1.a1887b2c1a188p-4",
+        "bind t2 = Float64 0x1.fdaf1a5b55dafp+5",
+        "result  = Float64 0x1.fdaf1a5b55dafp+5"
+      ],
+      "expect_value": 63.710499490316
+    },
+    {
+      "name": "flight-75",
+      "rule": "flight_range",
+      "args": {
+        "s": 0.49999999999999994
+      },
+      "tree": {
+        "op": "*",
+        "l": {
+          "op": "*",
+          "l": {
+            "name": "v0"
+          },
+          "r": {
+            "name": "v0"
+          }
+        },
+        "r": {
+          "op": "/",
+          "l": {
+            "name": "s"
+          },
+          "r": {
+            "name": "g"
+          }
+        }
+      },
+      "expect_log": [
+        "bind s  = Float64 0x1.fffffffffffffp-2",
+        "bind t0 = Float64 0x1.3880000000000p+9",
+        "bind t1 = Float64 0x1.a1887b2c1a187p-5",
+        "bind t2 = Float64 0x1.fdaf1a5b55dadp+4",
+        "result  = Float64 0x1.fdaf1a5b55dadp+4"
+      ],
+      "expect_value": 31.855249745157995
+    },
+    {
+      "name": "flight-domain",
+      "rule": "flight_range",
+      "args": {
+        "s": -0.1
+      },
+      "tree": {
+        "op": "*",
+        "l": {
+          "op": "*",
+          "l": {
+            "name": "v0"
+          },
+          "r": {
+            "name": "v0"
+          }
+        },
+        "r": {
+          "op": "/",
+          "l": {
+            "name": "s"
+          },
+          "r": {
+            "name": "g"
+          }
+        }
+      },
+      "expect_log": [
+        "err DomainError flight_range: invariant"
+      ],
+      "expect_value": null
+    },
+    {
+      "name": "flight-nan",
+      "rule": "flight_range",
+      "args": {
+        "s": {
+          "nan": true
+        }
+      },
+      "tree": {
+        "op": "*",
+        "l": {
+          "op": "*",
+          "l": {
+            "name": "v0"
+          },
+          "r": {
+            "name": "v0"
+          }
+        },
+        "r": {
+          "op": "/",
+          "l": {
+            "name": "s"
+          },
+          "r": {
+            "name": "g"
+          }
+        }
+      },
+      "expect_log": [
+        "err DomainError flight_range: invariant"
+      ],
+      "expect_value": null
+    },
+    {
+      "name": "hyp-two-leaves",
+      "rule": "hypotenuse",
+      "args": {
+        "c": 2.0
+      },
+      "tree": {
+        "op": "+",
+        "l": {
+          "op": "*",
+          "l": {
+            "name": "c"
+          },
+          "r": {
+            "name": "c"
+          }
+        },
+        "r": {
+          "op": "*",
+          "l": {
+            "name": "c"
+          },
+          "r": {
+            "name": "c"
+          }
+        }
+      },
+      "expect_log": [
+        "bind c  = Float64 0x1.0000000000000p+1",
+        "bind t0 = Float64 0x1.0000000000000p+2",
+        "bind t1 = Float64 0x1.0000000000000p+2",
+        "bind t2 = Float64 0x1.0000000000000p+3",
+        "result  = Float64 0x1.0000000000000p+3"
+      ],
+      "expect_value": 8.0
+    },
+    {
+      "name": "right-assoc",
+      "rule": "assoc_probe",
+      "args": {
+        "x": 10.0
+      },
+      "tree": {
+        "op": "/",
+        "l": {
+          "name": "x"
+        },
+        "r": {
+          "op": "/",
+          "l": {
+            "num": 2.0
+          },
+          "r": {
+            "num": 4.0
+          }
+        }
+      },
+      "expect_log": [
+        "bind x  = Float64 0x1.4000000000000p+3",
+        "bind t0 = Float64 0x1.0000000000000p-1",
+        "bind t1 = Float64 0x1.4000000000000p+4",
+        "result  = Float64 0x1.4000000000000p+4"
+      ],
+      "expect_value": 20.0
+    },
+    {
+      "name": "ieee-inf",
+      "rule": "inv_probe",
+      "args": {
+        "x": 0.0
+      },
+      "tree": {
+        "op": "/",
+        "l": {
+          "num": 1.0
+        },
+        "r": {
+          "name": "x"
+        }
+      },
+      "expect_log": [
+        "bind x  = Float64 0x0.0p+0",
+        "bind t0 = Float64 inf",
+        "result  = Float64 inf"
+      ],
+      "expect_value": Infinity
+    }
+  ],
+  "static_vectors": [
+    {
+      "name": "clean-spec",
+      "spec": "spec stage2 ;\n\nfact v0 25.0 ;\nfact g 9.81 ;\nfact alpha_deg 45.0 ;\n\nwire sin2a -> flight_range : Matrix[1,1] ;\nwire sin2a -> hypotenuse : Matrix[1,1] ;\nwire sin2a -> assoc_probe : Matrix[1,1] ;\nwire sin2a -> inv_probe : Matrix[1,1] ;\n\npure rule flight_range s = (v0 * v0) * s / g invariant s >= 0 ;\npure rule hypotenuse c = (c * c) + (c * c) ;\npure rule assoc_probe x = x / 2.0 / 4.0 ;\npure rule inv_probe x = 1.0 / x ;\n",
+      "expect": []
+    },
+    {
+      "name": "sc002-unknown-name",
+      "spec": "spec bad1 ;\n\npure rule f x = x + y ;\n",
+      "expect": [
+        "SC-002: unknown name y in rule f"
+      ]
+    },
+    {
+      "name": "sc060-undeclared-wire",
+      "spec": "spec bad2 ;\n\npure rule f x = x * 2.0 ;\n\nwire sin2a -> nosuch : Matrix[1,1] ;\n",
+      "expect": [
+        "SC-060: wire target nosuch is not a declared rule"
+      ]
+    },
+    {
+      "name": "order-002-before-060",
+      "spec": "spec bad3 ;\n\npure rule f x = x + y ;\n\nwire sin2a -> nosuch : Matrix[1,1] ;\n",
+      "expect": [
+        "SC-002: unknown name y in rule f",
+        "SC-060: wire target nosuch is not a declared rule"
+      ]
+    }
+  ]
+}
