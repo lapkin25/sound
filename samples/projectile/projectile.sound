@@ -1,0 +1,9 @@
+spec projectile ;
+
+fact v0 25.0 ;
+fact g 9.81 ;
+fact alpha_deg 45.0 ;
+
+wire sin2a -> flight_range : Matrix[1,1] ;
+
+pure rule flight_range s = (v0 * v0) * s / g invariant s >= 0 ;
