@@ -1,0 +1,53 @@
+{
+ "version": "wl-snap-1",
+ "names": {
+  "balance": "407f400000000000"
+ },
+ "funcs": {
+  "allowed": {
+   "params": [
+    "x",
+    "amt"
+   ],
+   "body": [
+    "cmp",
+    "<=",
+    [
+     "ref",
+     "amt"
+    ],
+    [
+     "ref",
+     "x"
+    ]
+   ]
+  },
+  "withdraw": {
+   "params": [
+    "x",
+    "amt"
+   ],
+   "body": [
+    "op",
+    "-",
+    [
+     "ref",
+     "x"
+    ],
+    [
+     "ref",
+     "amt"
+    ]
+   ]
+  }
+ },
+ "journal": [
+  "t1 set(balance) -> 408f400000000000",
+  "t2 -(408f400000000000,4072c00000000000) -> 4085e00000000000",
+  "t3 set(balance) -> 4085e00000000000",
+  "t4 -(4085e00000000000,4069000000000000) -> 407f400000000000",
+  "t5 set(balance) -> 407f400000000000"
+ ],
+ "last": "407f400000000000",
+ "fingerprint": "5fba2f9bbce7ee03926f550a490d9c5bae4ff1a8d9609bc677d4d3095f7def21"
+}

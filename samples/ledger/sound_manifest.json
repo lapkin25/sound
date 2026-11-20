@@ -1,0 +1,29 @@
+{
+ "files": [
+  {
+   "file": "sound_snap2.py",
+   "sha256": "29184308eb41b9e3749939ad0dfc935c1aabe780f8c1ef7363714b53d400b57d"
+  },
+  {
+   "file": "ledger.py",
+   "sha256": "e799659ac0049ce466d30ddb86e2499ae73c04ee416fcaf9d6eb2c7fe27a0825"
+  },
+  {
+   "file": "accounting.py",
+   "sha256": "80308a92a18bd417c0e246a06e15545119b3c4ec60449d19f133e6ed8b23e1db"
+  },
+  {
+   "file": "report.py",
+   "sha256": "19a052dfaa4a0a3bcc4d5f8c0b18b24cf1203dc7d3a1912ba311d9fe22cfe709"
+  },
+  {
+   "file": "replay_octave.m",
+   "sha256": "c3df452e4107c52cd34fa689b1fdc76188a9b66316021ca9af05c5fcb7320a23"
+  },
+  {
+   "file": "sound_all.py",
+   "sha256": "6236335f8c2830cbe6871beff35f2305b7c97473aa6d7960c39860444ab24889"
+  }
+ ],
+ "stack_fingerprint": "399e355d771df1a7cad6ea5abf0a22f3ba392f7f953cadbcea1318a75dd047ab"
+}
