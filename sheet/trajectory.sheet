@@ -1,0 +1,21 @@
+
+# лист «баллистика»: входы, константы и вычисляемые колонки
+sheet trajectory
+meta title "Баллистика: импульс и дальность"
+meta version 1
+col mass     Float64 kg           input  label "Масса"
+col velocity Float64 m/s          input  label "Скорость"
+col time     Float64 s            input  label "Время полёта"
+col momentum Float64 kg*m/s       computed label "Импульс"
+col ke       Float64 kg*m^2/s^2   computed label "Кинетическая энергия"
+col distance Float64 m            computed label "Дальность"
+set mass 12.0
+set velocity 20.0
+set time 30.0
+formula momentum mass * velocity
+formula ke 0.5 * mass * velocity * velocity
+formula distance velocity * time
+invariant momentum >= 0
+invariant distance >= 0
+display momentum 0.#
+display ke 0.###
