@@ -1,0 +1,19 @@
+# pipeline.sound — AnomalyMonitor, единая грамматика Sound v0.2 (ядро)
+spec AnomalyMonitor {
+
+  fact v0 = 625.0 : Float64;
+  fact g = 9.81 : Float64;
+  fact half = 0.5;
+
+  rule flight_range(s: Float64) -> Float64 invariant s >= 0
+       = s * half * s * g; # octave
+
+  rule energy(m: Float64, v: Float64) -> Float64 invariant m >= 0
+       = half * m * v * v; # python
+
+  wire flight_range = v0;
+  wire energy.m = v0;
+  wire energy.v = half;
+
+  invariant g > 0;
+}

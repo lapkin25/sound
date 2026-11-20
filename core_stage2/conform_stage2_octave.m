@@ -183,8 +183,16 @@ function eq = cell_str_equal(a, b)
 endfunction
 
 function ok = value_ok(val, expect)
-  if isnumeric(expect) && isscalar(expect) && isnan(expect)
-    ok = isempty(val);     % null in JSON decodes to NaN: err case, val empty
+  if ischar(expect)          % "nan" | "inf" | "-inf"
+    ok = strcmp(canon(val), expect);
+    return
+  endif
+  if isstruct(expect)        % {"hex_bits": ...} — точные биты IEEE-754
+    ok = strcmp(canon(val), canon(bits2double(expect.hex_bits)));
+    return
+  endif
+  if isnumeric(expect) && numel(expect) == 0   % null -> err-вектор
+    ok = isempty(val);
     return
   endif
   ok = strcmp(canon(val), canon(expect));
