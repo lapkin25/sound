@@ -1,0 +1,42 @@
+{
+ "names": {
+  "x": "0x3ff6a09e667f3bcc",
+  "step": {
+   "func": {
+    "params": [
+     "y"
+    ],
+    "body": [
+     "bin",
+     "/",
+     [
+      "bin",
+      "+",
+      [
+       "ref",
+       "y"
+      ],
+      [
+       "bin",
+       "/",
+       [
+        "num",
+        2.0
+       ],
+       [
+        "ref",
+        "y"
+       ]
+      ]
+     ],
+     [
+      "num",
+      2.0
+     ]
+    ]
+   }
+  }
+ },
+ "journal_len": 75,
+ "fingerprint": "0fad13186850e67f8df03523075fcc3c729076e2204c3fd58b006117db162e74"
+}
