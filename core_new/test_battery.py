@@ -195,7 +195,7 @@ if _FAILS:
     print("FAILURES: %d -> %s" % (len(_FAILS), ", ".join(_FAILS)))
     raise SystemExit(1)
 total = 0
-
-with open(__file__) as f:
+print(__file__)
+with open(__file__, encoding='utf-8') as f:
     total = sum(1 for line in f if line.lstrip().startswith('ck("'))
 print("ALL PASS (%d/%d)" % (total, total))
