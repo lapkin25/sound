@@ -1,0 +1,570 @@
+{
+ "format": "sound-fixtures-1",
+ "spec_version": "0.2",
+ "canon_vectors": [
+  {
+   "name": "three",
+   "hex_bits": "4008000000000000",
+   "expect": "0x1.8000000000000p+1"
+  },
+  {
+   "name": "neg-two-point-25",
+   "hex_bits": "c002000000000000",
+   "expect": "-0x1.2000000000000p+1"
+  },
+  {
+   "name": "zero",
+   "hex_bits": "0000000000000000",
+   "expect": "0x0.0p+0"
+  },
+  {
+   "name": "neg-zero",
+   "hex_bits": "8000000000000000",
+   "expect": "-0x0.0p+0"
+  },
+  {
+   "name": "pos-inf",
+   "hex_bits": "7ff0000000000000",
+   "expect": "inf"
+  },
+  {
+   "name": "nan",
+   "hex_bits": "7ff8000000000000",
+   "expect": "nan"
+  },
+  {
+   "name": "one",
+   "hex_bits": "3ff0000000000000",
+   "expect": "0x1.0000000000000p+0"
+  },
+  {
+   "name": "two-point-five",
+   "hex_bits": "4004000000000000",
+   "expect": "0x1.4000000000000p+1"
+  },
+  {
+   "name": "tenth",
+   "hex_bits": "3fb999999999999a",
+   "expect": "0x1.999999999999ap-4"
+  },
+  {
+   "name": "max-double",
+   "hex_bits": "7fefffffffffffff",
+   "expect": "0x1.fffffffffffffp+1023"
+  },
+  {
+   "name": "min-denormal",
+   "hex_bits": "0000000000000001",
+   "expect": "0x0.0000000000001p-1022"
+  },
+  {
+   "name": "neg-tenth",
+   "hex_bits": "bfb999999999999a",
+   "expect": "-0x1.999999999999ap-4"
+  }
+ ],
+ "triomat_samples": [
+  {
+   "name": "f64_vec3",
+   "dtype": "Float64",
+   "shape": [
+    3
+   ],
+   "values": [
+    0.5,
+    -1.25,
+    2.0
+   ],
+   "base64": "VFJJT01BVDEfAAAAeyJkdHlwZSI6IkZsb2F0NjQiLCJzaGFwZSI6WzNdfQAAAAAAAOA/AAAAAAAA9L8AAAAAAAAAQA=="
+  },
+  {
+   "name": "f64_2x2",
+   "dtype": "Float64",
+   "shape": [
+    2,
+    2
+   ],
+   "values": [
+    [
+     1.0,
+     2.0
+    ],
+    [
+     3.0,
+     4.0
+    ]
+   ],
+   "base64": "VFJJT01BVDEhAAAAeyJkdHlwZSI6IkZsb2F0NjQiLCJzaGFwZSI6WzIsMl19AAAAAAAA8D8AAAAAAAAAQAAAAAAAAAhAAAAAAAAAEEA="
+  },
+  {
+   "name": "i64_2x2",
+   "dtype": "Int64",
+   "shape": [
+    2,
+    2
+   ],
+   "values": [
+    [
+     1,
+     -2
+    ],
+    [
+     9223372036854775807,
+     -1
+    ]
+   ],
+   "base64": "VFJJT01BVDEfAAAAeyJkdHlwZSI6IkludDY0Iiwic2hhcGUiOlsyLDJdfQEAAAAAAAAA/v//////////////////f///////////"
+  },
+  {
+   "name": "bool_vec4",
+   "dtype": "Bool",
+   "shape": [
+    4
+   ],
+   "values": [
+    1,
+    0,
+    1,
+    1
+   ],
+   "base64": "VFJJT01BVDEcAAAAeyJkdHlwZSI6IkJvb2wiLCJzaGFwZSI6WzRdfQEAAQE="
+  },
+  {
+   "name": "f32_vec2",
+   "dtype": "Float32",
+   "shape": [
+    2
+   ],
+   "values": [
+    1.5,
+    -0.25
+   ],
+   "base64": "VFJJT01BVDEfAAAAeyJkdHlwZSI6IkZsb2F0MzIiLCJzaGFwZSI6WzJdfQAAwD8AAIC+"
+  }
+ ],
+ "malformed_samples": [
+  {
+   "name": "empty",
+   "base64": "",
+   "expect_code": "MalformedHeader",
+   "reader_count": 1,
+   "reader_last": "ResourceLost"
+  },
+  {
+   "name": "bad-magic",
+   "base64": "WFhYWFhYWFgfAAAAeyJkdHlwZSI6IkZsb2F0NjQiLCJzaGFwZSI6WzJdfQAAAAAAAPA/AAAAAAAAAEA=",
+   "expect_code": "MalformedHeader",
+   "reader_count": 2,
+   "reader_last": "MalformedHeader"
+  },
+  {
+   "name": "short-file",
+   "base64": "VFJJT00=",
+   "expect_code": "MalformedHeader",
+   "reader_count": 2,
+   "reader_last": "MalformedHeader"
+  },
+  {
+   "name": "truncated-header",
+   "base64": "VFJJT01BVDEfAAAAeyJkdHlwZSI6IkZsb2F0NjQiLCJzaGFwZSI6WzJd",
+   "expect_code": "MalformedHeader",
+   "reader_count": 4,
+   "reader_last": "MalformedHeader"
+  },
+  {
+   "name": "unknown-dtype",
+   "base64": "VFJJT01BVDEhAAAAeyJkdHlwZSI6IkNvbXBsZXg2NCIsInNoYXBlIjpbMl19AAAAAAAA8D8AAAAAAAAAQA==",
+   "expect_code": "MalformedDtype",
+   "reader_count": 5,
+   "reader_last": "MalformedDtype"
+  },
+  {
+   "name": "short-payload",
+   "base64": "VFJJT01BVDEfAAAAeyJkdHlwZSI6IkZsb2F0NjQiLCJzaGFwZSI6WzJdfQAAAAAAAPA/AAAAAAAAAA==",
+   "expect_code": "MalformedPayload",
+   "reader_count": 7,
+   "reader_last": "MalformedPayload"
+  },
+  {
+   "name": "bool-byte-2",
+   "base64": "VFJJT01BVDEcAAAAeyJkdHlwZSI6IkJvb2wiLCJzaGFwZSI6WzFdfQI=",
+   "expect_code": "TypeMismatch",
+   "reader_count": 9,
+   "reader_last": "TypeMismatch"
+  },
+  {
+   "name": "bad-json",
+   "base64": "VFJJT01BVDEIAAAAeyJkdHlwZSI=",
+   "expect_code": "MalformedHeader",
+   "reader_count": 4,
+   "reader_last": "MalformedHeader"
+  }
+ ],
+ "arith_vectors": [
+  {
+   "lhs": 2,
+   "rhs": 3,
+   "expect_num": 5,
+   "name": "int-add",
+   "kind": "int",
+   "op": "+",
+   "int_str": "",
+   "int_bits": "",
+   "lhs_bits": "",
+   "rhs_bits": "",
+   "expect_str": "",
+   "expect_code": "",
+   "lossy": false
+  },
+  {
+   "lhs": 3,
+   "rhs": 2,
+   "expect_num": 1,
+   "name": "int-div-trunc",
+   "kind": "int",
+   "op": "/",
+   "int_str": "",
+   "int_bits": "",
+   "lhs_bits": "",
+   "rhs_bits": "",
+   "expect_str": "",
+   "expect_code": "",
+   "lossy": false
+  },
+  {
+   "lhs": -3,
+   "rhs": 2,
+   "expect_num": -1,
+   "name": "int-div-trunc-neg",
+   "kind": "int",
+   "op": "/",
+   "int_str": "",
+   "int_bits": "",
+   "lhs_bits": "",
+   "rhs_bits": "",
+   "expect_str": "",
+   "expect_code": "",
+   "lossy": false
+  },
+  {
+   "lhs": -3,
+   "rhs": 2,
+   "expect_num": 1,
+   "name": "int-mod-sign",
+   "kind": "int",
+   "op": "%",
+   "int_str": "",
+   "int_bits": "",
+   "lhs_bits": "",
+   "rhs_bits": "",
+   "expect_str": "",
+   "expect_code": "",
+   "lossy": false
+  },
+  {
+   "lhs": 1,
+   "rhs": 0,
+   "expect_code": "DivisionByZero",
+   "name": "int-div-zero",
+   "kind": "int",
+   "op": "/",
+   "int_str": "",
+   "int_bits": "",
+   "lhs_bits": "",
+   "rhs_bits": "",
+   "expect_num": [],
+   "expect_str": "",
+   "lossy": false
+  },
+  {
+   "int_str": "9223372036854775807",
+   "rhs": 1,
+   "expect_code": "IntRangeOverflow",
+   "name": "int-add-overflow",
+   "kind": "int",
+   "op": "+",
+   "int_bits": "",
+   "lhs": 0,
+   "lhs_bits": "",
+   "rhs_bits": "",
+   "expect_num": [],
+   "expect_str": "",
+   "lossy": false
+  },
+  {
+   "int_str": "9223372036854775807",
+   "rhs": 2,
+   "expect_code": "IntRangeOverflow",
+   "name": "int-mul-overflow",
+   "kind": "int",
+   "op": "*",
+   "int_bits": "",
+   "lhs": 0,
+   "lhs_bits": "",
+   "rhs_bits": "",
+   "expect_num": [],
+   "expect_str": "",
+   "lossy": false
+  },
+  {
+   "lhs_bits": "3ff0000000000000",
+   "rhs_bits": "0000000000000000",
+   "expect_str": "inf",
+   "name": "float-div-pos-inf",
+   "kind": "float",
+   "op": "/",
+   "int_str": "",
+   "int_bits": "",
+   "lhs": 0,
+   "rhs": 0,
+   "expect_num": [],
+   "expect_code": "",
+   "lossy": false
+  },
+  {
+   "lhs_bits": "bff0000000000000",
+   "rhs_bits": "0000000000000000",
+   "expect_str": "-inf",
+   "name": "float-div-neg-inf",
+   "kind": "float",
+   "op": "/",
+   "int_str": "",
+   "int_bits": "",
+   "lhs": 0,
+   "rhs": 0,
+   "expect_num": [],
+   "expect_code": "",
+   "lossy": false
+  },
+  {
+   "lhs_bits": "0000000000000000",
+   "rhs_bits": "0000000000000000",
+   "expect_code": "NaNOutsideDomain",
+   "name": "float-div-zero-nan",
+   "kind": "float",
+   "op": "/",
+   "int_str": "",
+   "int_bits": "",
+   "lhs": 0,
+   "rhs": 0,
+   "expect_num": [],
+   "expect_str": "",
+   "lossy": false
+  },
+  {
+   "lhs_bits": "7ff0000000000000",
+   "rhs_bits": "7ff0000000000000",
+   "expect_code": "NaNOutsideDomain",
+   "name": "float-inf-minus-inf",
+   "kind": "float",
+   "op": "-",
+   "int_str": "",
+   "int_bits": "",
+   "lhs": 0,
+   "rhs": 0,
+   "expect_num": [],
+   "expect_str": "",
+   "lossy": false
+  },
+  {
+   "lhs_bits": "7ff0000000000000",
+   "rhs_bits": "0000000000000000",
+   "expect_code": "NaNOutsideDomain",
+   "name": "float-inf-times-zero",
+   "kind": "float",
+   "op": "*",
+   "int_str": "",
+   "int_bits": "",
+   "lhs": 0,
+   "rhs": 0,
+   "expect_num": [],
+   "expect_str": "",
+   "lossy": false
+  },
+  {
+   "lhs_bits": "7ff0000000000000",
+   "rhs_bits": "7ff0000000000000",
+   "expect_code": "NaNOutsideDomain",
+   "name": "float-inf-div-inf",
+   "kind": "float",
+   "op": "/",
+   "int_str": "",
+   "int_bits": "",
+   "lhs": 0,
+   "rhs": 0,
+   "expect_num": [],
+   "expect_str": "",
+   "lossy": false
+  },
+  {
+   "int_bits": "0000000000000003",
+   "rhs_bits": "3fe0000000000000",
+   "expect_num": 3.5,
+   "lossy": false,
+   "name": "mixed-widen",
+   "kind": "mixed",
+   "op": "+",
+   "int_str": "",
+   "lhs": 0,
+   "rhs": 0,
+   "lhs_bits": "",
+   "expect_str": "",
+   "expect_code": ""
+  },
+  {
+   "int_bits": "001fffffffffffff",
+   "rhs_bits": "3fe0000000000000",
+   "expect_num": 9007199254740992.0,
+   "lossy": true,
+   "name": "mixed-lossy-at-53",
+   "kind": "mixed",
+   "op": "+",
+   "int_str": "",
+   "lhs": 0,
+   "rhs": 0,
+   "lhs_bits": "",
+   "expect_str": "",
+   "expect_code": ""
+  },
+  {
+   "lhs_bits": "3ff8000000000000",
+   "rhs_bits": "4002000000000000",
+   "expect_num": -0.75,
+   "name": "float-sub-neg",
+   "kind": "float",
+   "op": "-",
+   "int_str": "",
+   "int_bits": "",
+   "lhs": 0,
+   "rhs": 0,
+   "expect_str": "",
+   "expect_code": "",
+   "lossy": false
+  }
+ ],
+ "journal_vectors": [
+  {
+   "name": "let-int",
+   "scope": "core",
+   "desc": "let x=2 ; x+3",
+   "log": [
+    "bind x = Int64 2",
+    "bind t0 = Int64 5",
+    "result Int64 5"
+   ]
+  },
+  {
+   "name": "div-pos-inf",
+   "scope": "host",
+   "desc": "1.0/0.0",
+   "log": [
+    "result Float64 inf"
+   ]
+  },
+  {
+   "name": "div-neg-inf",
+   "scope": "host",
+   "desc": "-1.0/0.0",
+   "log": [
+    "result Float64 -inf"
+   ]
+  },
+  {
+   "name": "nan-outside",
+   "scope": "host",
+   "desc": "0.0/0.0",
+   "log": [
+    "err NaNOutsideDomain"
+   ]
+  },
+  {
+   "name": "div-by-zero",
+   "scope": "host",
+   "desc": "1/0",
+   "log": [
+    "err DivisionByZero"
+   ]
+  },
+  {
+   "name": "bool-result",
+   "scope": "host",
+   "desc": "2<3",
+   "log": [
+    "result Bool true"
+   ]
+  },
+  {
+   "name": "closure-full",
+   "scope": "core",
+   "desc": "add(100,5)",
+   "log": [
+    "bind a = Int64 100",
+    "bind b = Int64 5",
+    "bind t0 = Int64 105",
+    "result Int64 105"
+   ]
+  }
+ ],
+ "static_vectors": [
+  {
+   "name": "clean",
+   "spec": "spec s ; rule r x = x ;",
+   "expect": []
+  },
+  {
+   "name": "sc-060",
+   "spec": "spec s ; wire A -> B ;",
+   "expect": [
+    "SC-060"
+   ]
+  },
+  {
+   "name": "sc-002",
+   "spec": "spec s ; rule r x = q + 1 ;",
+   "expect": [
+    "SC-002"
+   ]
+  },
+  {
+   "name": "order-sc002-sc060",
+   "spec": "spec s ; wire A -> B ; rule r x = q + 1 ;",
+   "expect": [
+    "SC-002",
+    "SC-060"
+   ]
+  }
+ ],
+ "codes": [
+  "AccessDenied",
+  "Cancelled",
+  "DivisionByZero",
+  "DomainError",
+  "IntRangeOverflow",
+  "InternalError",
+  "MalformedDtype",
+  "MalformedHeader",
+  "MalformedPayload",
+  "MalformedShape",
+  "NaNOutsideDomain",
+  "PermissionDenied",
+  "ResourceBusy",
+  "ResourceLost",
+  "Timeout",
+  "TypeMismatch",
+  "UnknownCode",
+  "UnknownName",
+  "UnknownSymbol"
+ ],
+ "dtype_table": {
+  "Bool": 1,
+  "Int8": 1,
+  "Int16": 2,
+  "Int32": 4,
+  "Int64": 8,
+  "UInt8": 1,
+  "Float16": 2,
+  "Float32": 4,
+  "Float64": 8,
+  "Float128_note": "16 bytes, only if numpy build supports it"
+ }
+}
