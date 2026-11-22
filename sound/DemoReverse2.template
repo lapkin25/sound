@@ -1,0 +1,45 @@
+# DemoReverse2 — разворот массива через foldlist + cons
+# формат sound-0.5.2, грамматика v0.5.1 (frozen)
+# elems = [3,-1,4,1,5,9,2,6]
+t0001 const nil -> ?
+t0002 const 3 -> ?
+t0003 snoc t0001 t0002 -> ?
+t0004 const -1 -> ?
+t0005 snoc t0003 t0004 -> ?
+t0006 const 4 -> ?
+t0007 snoc t0005 t0006 -> ?
+t0008 const 1 -> ?
+t0009 snoc t0007 t0008 -> ?
+t0010 const 5 -> ?
+t0011 snoc t0009 t0010 -> ?
+t0012 const 9 -> ?
+t0013 snoc t0011 t0012 -> ?
+t0014 const 2 -> ?
+t0015 snoc t0013 t0014 -> ?
+t0016 const 6 -> ?
+t0017 snoc t0015 t0016 -> ?
+t0018 const nil -> ?
+t0019 const 0 -> ?
+t0020 part t0017 t0019 -> ?
+t0021 cons t0018 t0020 -> ?
+t0022 const 1 -> ?
+t0023 part t0017 t0022 -> ?
+t0024 cons t0021 t0023 -> ?
+t0025 const 2 -> ?
+t0026 part t0017 t0025 -> ?
+t0027 cons t0024 t0026 -> ?
+t0028 const 3 -> ?
+t0029 part t0017 t0028 -> ?
+t0030 cons t0027 t0029 -> ?
+t0031 const 4 -> ?
+t0032 part t0017 t0031 -> ?
+t0033 cons t0030 t0032 -> ?
+t0034 const 5 -> ?
+t0035 part t0017 t0034 -> ?
+t0036 cons t0033 t0035 -> ?
+t0037 const 6 -> ?
+t0038 part t0017 t0037 -> ?
+t0039 cons t0036 t0038 -> ?
+t0040 const 7 -> ?
+t0041 part t0017 t0040 -> ?
+t0042 cons t0039 t0041 -> ?
