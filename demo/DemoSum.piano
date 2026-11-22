@@ -1,0 +1,7 @@
+# Piano frozen v0.5.1 — десугаринг Sound v0.1 (sound_to_piano)
+section data
+  A = (3, -1, 4, 1, 5, 9, 2, 6)
+
+section demo_sum
+  rule step cur x = plus cur x
+  foldlist A step (const 0)

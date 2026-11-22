@@ -1,0 +1,9 @@
+# DemoSumPos — сумма положительных элементов массива
+# Piano frozen v0.5.1
+
+section data
+  A = (3, -1, 4, 1, 5, 9, 2, 6)
+
+section sum_pos
+  rule step cur x = If (lt 0 x) (plus cur x) cur
+  foldlist A step (const 0)
