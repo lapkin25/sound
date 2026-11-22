@@ -1,0 +1,16 @@
+# DemoBin2Dec — перевод из двоичной системы счисления в десятичную
+# sound v0.1, грамматика v0.5.1 (frozen)
+
+fact n  = 6
+fact b0 = 1
+fact b1 = 0
+fact b2 = 1
+fact b3 = 1
+fact b4 = 0
+fact b5 = 1
+
+fact bits = snoc (snoc (snoc (snoc (snoc (snoc nil b0) b1) b2) b3) b4) b5
+
+rule step acc x = If (lt 0 x) (plus (plus acc acc) 1) (plus acc acc)
+
+out dec = foldlist step (const 0) bits

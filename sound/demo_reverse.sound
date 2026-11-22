@@ -1,0 +1,17 @@
+# DemoReverse — разворот массива целых чисел
+# грамматика v0.5.1 (frozen); реконструкция исходника по эталонному журналу
+# foldlist не нужен: реверс выражается вложенной цепочкой snoc
+
+fact a0 = 3
+fact a1 = -1
+fact a2 = 4
+fact a3 = 1
+fact a4 = 5
+fact a5 = 9
+fact a6 = 2
+fact a7 = 6
+
+fact arr8 = snoc (snoc (snoc (snoc (snoc (snoc (snoc (snoc nil a0) a1) a2) a3) a4) a5) a6) a7
+fact L = arr8
+
+out m = snoc (snoc (snoc (snoc (snoc (snoc (snoc (snoc nil (part L 7)) (part L 6)) (part L 5)) (part L 4)) (part L 3)) (part L 2)) (part L 1)) (part L 0)

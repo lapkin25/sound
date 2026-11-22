@@ -1,0 +1,9 @@
+# Piano frozen v0.5.1 — Sound v0.1 (sound_to_piano)
+
+section data
+  arr8 = [3, -1, 4, 1, 5, 9, 2, 6]
+
+section rule
+  rule step acc x = cons acc x
+
+out r = foldlist step nil arr8
