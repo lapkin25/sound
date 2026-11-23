@@ -1,0 +1,32 @@
+# demo_digsum — сумма цифр n и цифровой корень (кейс (д))
+# звук-файл v0.6, грамматика v0.6.1 (draft: bounded while), deref-канон
+# Ступень 2: while по условию. Ступень 1: цикл2 идёт по вычисленному s.
+# Неэлиминируемый кейс: у суммы цифр нет закрытой формы
+# (см. registry_f3_noneliminability.md). Кросс-сверка с кейсом (г):
+# dr_iter из повторной суммы цифр обязан совпасть с dr_formula = 1+(n-1) mod 9.
+
+fact n = 472593
+
+# цикл 1: сумма цифр
+s := 0
+x := n
+while 0 < x do
+  d  := x mod 10
+  s  := s + d
+  x  := x div 10
+end bound: 7          # len10(n) + 1 = 6 + 1
+
+# цикл 2: цифровой корень — по вычисленному значению s
+s2 := s
+while 1 < s2 do
+  d2 := s2 mod 10
+  s2 := s2 div 10 + d2
+end bound: 3          # s <= 54 => не более двух проходов + 1
+
+# формула (кейс (г)) — независимая дорога к тому же значению
+dr_formula := if 0 < n then 1 + (n - 1) mod 9 else 0
+
+out dr_formula = dr_formula
+out dr_iter    = s2
+out eq = if dr_iter < dr_formula then 0
+         else (if dr_formula < dr_iter then 0 else 1)
