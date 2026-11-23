@@ -1,0 +1,26 @@
+# demo_forfold — классический for через foldlist (кейс (ж))
+# Схема: for i := a to b do B end  =  rng := range(a,b); foldlist B acc0 rng
+# Терминация фазы 2 — структурная (§4): bound не нужен.
+# Дедукция сосредоточена в range-билдере — лемме, доказываемой один раз.
+# Синтаксис foldlist-формы с инлайн-телом — v0.6.2 draft.
+
+fact n = 10
+
+# фаза 1: materialization диапазона — единственный deductive-цикл кейса
+rng := nil
+i   := 1
+n1  := n + 1
+while i < n1 do
+  rng := snoc rng i
+  i   := i + 1
+end bound: n + 1
+
+# фаза 2: for = foldlist по rng. Тело for'а: acc := acc + e*e
+acc := 0
+acc := foldlist (acc e -> acc + e * e) acc rng
+
+# фаза 3: кросс-сверка — закрытая форма суммы квадратов
+f  := n * n1 * (2 * n + 1) div 6
+out acc = acc
+out f   = f
+out eq  = if acc < f then 0 else (if f < acc then 0 else 1)
