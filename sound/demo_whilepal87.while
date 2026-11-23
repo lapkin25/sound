@@ -1,0 +1,7 @@
+# demo_whilepal87 — while v0.7 draft, Class B per-case certificate
+# f(n) = n + rev(n); считать до палиндрома. Известный малый пример: 4 шага до 4884.
+step f   = comp[plus, pi(1,1), rev]
+stop pal = comp[eq, pi(1,1), rev]
+entry f(87)
+until pal
+cert 87 165 726 1353 4884

@@ -1,0 +1,5 @@
+# demo_prfact.pr — эталон №15, прямая дорога (run_pr.py)
+def one  = comp[s, z]
+def fact = prec[one, comp[mul, comp[s, pi(2,1)], pi(2,2)]]
+
+entry fact(5)

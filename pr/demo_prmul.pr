@@ -1,0 +1,6 @@
+# demo_prmul.pr — вложенный prec: mul вызывает add (тоже prec)
+def one = comp[s, z]
+def add = prec[pi(2,2), comp[s, pi(3,2)]]
+def mul = prec[z, comp[add, pi(3,2), pi(3,3)]]
+
+entry mul(6,7)

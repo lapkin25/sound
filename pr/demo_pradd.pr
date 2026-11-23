@@ -1,0 +1,4 @@
+# demo_pradd.pr — add из чистых схем
+def add = prec[pi(2,2), comp[s, pi(3,2)]]
+
+entry add(5,3)
