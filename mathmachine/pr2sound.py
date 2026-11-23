@@ -1,208 +1,282 @@
 #!/usr/bin/env python3
-# pr2sound.py v0.3 — компилятор PR → звуковая машина v0.3
+# pr2sound.py v0.3.1 — компилятор PR → звуковая машина
 #
-# Машина: фреймовая. Аккумулятор V, стек значений, регистры внутри фрейма.
-# Инструкции:
-#   LOADI k        V := k
-#   LOADA i        V := R["a{i}"]        (аргумент текущего фрейма)
-#   LOADR r        V := R[r]
-#   STORER r       R[r] := V
-#   PUSH           stack.push(V)
-#   ADD/SUB/MUL    b=pop, a=pop, V := a OP b
-#   EQ             b=pop, a=pop, V := 1 если a=b иначе 0
-#   JZ lbl         если V=0 — переход на метку
-#   JMP lbl        безусловный переход
-#   CALL fn n      снять n аргументов со стека (последний сверху, затем переворот),
-#                  сохранить (ret_pc, V), создать фрейм с R={a0..}, cid += 1, V := 0
-#   RET            V := V (возвращаемое значение), восстановить pc из фрейма, снять фрейм
-#   HALT           останов; результат — текущее V
+# Вход: .pr-программа (формат как в run_pr.py).
+# Выход: .sound.json — программа звуковой машины:
+#   {"fmt": "sound-v0.3", "src_sha256": ..., "entry": имя,
+#    "fns": {имя: {"params": [...], "code": [...]}},
+#    "main": {"code": [...]}}
+# Исполнитель (run_sound.py) проверяет поле fmt — файлы другого формата
+# отвергаются с явным сообщением (защита от огрызков прошлых версий).
 #
-# Каждая исполненная инструкция даёт одну запись протокола.
-#
-# Соглашение протокола (MM-1.4, черновик до живой сверки):
-#   i     — номер шага (0-базный)
-#   op    — имя инструкции
-#   args  — аргументы инструкции
-#   state — снимок после исполнения: {"V": ...}
-#   depth — глубина вызова ПОСЛЕ исполнения CALL (CALL и все записи его инстанции,
-#           включая её RET, имеют одинаковый depth)
-#   cid   — монотонный номер вызова: CALL записывает новый cid; записи инстанции
-#           (включая её RET) несут его; main — cid 0.
-#   pc    — индекс исполнявшейся инструкции в коде функции
-#
-# Хеш программы-источника — sha256 нормализованного текста (D3), пишется в объект.
-import sys, re, json, hashlib
+# Инструкции (кодировка: [op, arg]; arg=None, где не нужен):
+#   PUSH n            — положить константу
+#   LOAD i / STORE i  — слот текущего фрейма
+#   ADD / SUB / MUL   — b=pop(); a=pop(); V=a op b; push(V)
+#   CALL [fn, nargs]  — снять nargs аргументов, новый фрейм
+#   RET               — вернуть V со стека
+#   JZ метка / JMP метка — условный/безусловный переход по индексу
+#   HALT
+# Протокол записи: {"pc", "op", "args", "state": {"V": ...}, "depth", "cid"}
+# CALL/RET парны по cid (монотонный номер вызова); depth — вложенность.
 
-# ---- парсер PR (автономный, дублирует run_pr.py намеренно) ----
+import sys, hashlib, re
+
+# ---------- нормализация и хеш (та же конвенция, что в run_pr.py) ----------
 
 def normalize(text):
-    lines = [l.rstrip() for l in text.splitlines()]
-    return "\n".join(l for l in lines if l.strip())
+    lines = [ln.rstrip() for ln in text.splitlines()]
+    return "\n".join(ln for ln in lines if ln.strip())
 
-def strip_comment(line):
-    i = line.find(';')
-    return line[:i] if i >= 0 else line
+def sha256_of(text):
+    return hashlib.sha256(normalize(text).encode("utf-8")).hexdigest()
 
-def parse(text):
-    defs, entry = {}, None
-    for raw in text.splitlines():
-        line = strip_comment(raw).strip()
-        if not line:
-            continue
-        m = re.match(r'^def\s+(\w+)\s*\(([^)]*)\)\s*=\s*(.+)$', line)
-        if m:
-            params = [p.strip() for p in m.group(2).split(',') if p.strip()]
-            defs[m.group(1)] = (params, m.group(3).strip())
-            continue
-        m = re.match(r'^entry\s+(\w+)\s*\(([^)]*)\)\s*$', line)
-        if m:
-            args = [int(x.strip()) for x in m.group(2).split(',') if x.strip()]
-            entry = (m.group(1), args)
-            continue
-        raise SyntaxError("не разобрать строку: %r" % line)
-    if entry is None:
-        raise SyntaxError("нет строки entry")
-    return defs, entry
+# ---------- разбор (копия run_pr.py — файлы самодостаточны) ----------
+
+DEF_RE = re.compile(r"^def\s+([A-Za-z_]\w*)\s*\(([^()]*)\)\s*=\s*(.+)$")
+ENTRY_RE = re.compile(r"^entry\s+([A-Za-z_]\w*)\s*\(([^()]*)\)\s*$")
 
 def tokenize(s):
-    return re.findall(r'\d+|\w+|[(),]', s)
+    toks = []
+    i = 0
+    while i < len(s):
+        c = s[i]
+        if c.isspace():
+            i += 1
+        elif c.isdigit():
+            j = i
+            while j < len(s) and s[j].isdigit():
+                j += 1
+            toks.append(("num", int(s[i:j]))); i = j
+        elif c.isalpha() or c == "_":
+            j = i
+            while j < len(s) and (s[j].isalnum() or s[j] == "_"):
+                j += 1
+            toks.append(("name", s[i:j])); i = j
+        elif c in "+-*(),":
+            toks.append(("op", c)); i += 1
+        else:
+            raise SyntaxError(f"неожиданный символ {c!r} в {s!r}")
+    toks.append(("end", None))
+    return toks
 
-class Tok:
+class Parser:
     def __init__(self, toks):
-        self.t = toks; self.i = 0
+        self.toks = toks; self.i = 0
     def peek(self):
-        return self.t[self.i] if self.i < len(self.t) else None
-    def take(self):
-        t = self.peek(); self.i += 1; return t
+        return self.toks[self.i]
+    def next(self):
+        t = self.toks[self.i]; self.i += 1; return t
+    def expect(self, kind, val):
+        t = self.next()
+        if t != (kind, val):
+            raise SyntaxError(f"ожидалось {val!r}, найдено {t!r}")
+    def expr(self):
+        node = self.term()
+        while self.peek() == ("op", "+") or self.peek() == ("op", "-"):
+            op = self.next()[1]
+            node = ("bin", op, node, self.term())
+        return node
+    def term(self):
+        node = self.atom()
+        while self.peek() == ("op", "*"):
+            self.next()
+            node = ("bin", "*", node, self.atom())
+        return node
+    def atom(self):
+        t = self.next()
+        if t == ("op", "("):
+            e = self.expr()
+            self.expect("op", ")")
+            return e
+        if t[0] == "num":
+            return ("num", t[1])
+        if t[0] == "name":
+            if self.peek() == ("op", "("):
+                self.next()
+                args = [self.expr()]
+                while self.peek() == ("op", ","):
+                    self.next()
+                    args.append(self.expr())
+                self.expect("op", ")")
+                if t[1] == "prec":
+                    if len(args) != 3:
+                        raise SyntaxError("prec принимает 3 аргумента: prec(c, g, h)")
+                    if args[2][0] != "var":
+                        raise SyntaxError("шаг prec задаётся именем функции")
+                    return ("prec", args[0], args[1], args[2])
+                return ("call", t[1], args)
+            return ("var", t[1])
+        raise SyntaxError(f"неожиданный токен {t!r}")
 
 def parse_expr(s):
-    t = Tok(tokenize(s))
-    e = expr(t)
-    if t.peek() is not None:
-        raise SyntaxError("лишние токены в: %r" % s)
-    return e
+    p = Parser(tokenize(s))
+    node = p.expr()
+    if p.peek() != ("end", None):
+        raise SyntaxError(f"хвост выражения не разобран: {p.peek()!r}")
+    return node
 
-def expr(t):
-    x = t.take()
-    if x is None:
-        raise SyntaxError("обрыв выражения")
-    if x.isdigit():
-        return ('lit', int(x))
-    if re.match(r'^\w+$', x):
-        if t.peek() == '(':
-            t.take()
+def parse_program(text):
+    fns = {}
+    entry = None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith(";"):
+            continue
+        m = DEF_RE.match(line)
+        if m:
+            fns[m.group(1)] = {
+                "params": [p.strip() for p in m.group(2).split(",") if p.strip()],
+                "body": parse_expr(m.group(3)),
+            }
+            continue
+        m = ENTRY_RE.match(line)
+        if m:
+            toks = tokenize(m.group(2))
             args = []
-            if t.peek() != ')':
-                args.append(expr(t))
-                while t.peek() == ',':
-                    t.take(); args.append(expr(t))
-            if t.take() != ')':
-                raise SyntaxError("ожидалась )")
-            return ('call', x, args)
-        return ('var', x)
-    raise SyntaxError("неожиданный токен %r" % x)
+            if toks[0] != ("end", None):
+                p = Parser(toks)
+                args.append(p.expr())
+                while p.peek() == ("op", ","):
+                    p.next()
+                    args.append(p.expr())
+            entry = {"name": m.group(1), "args": args}
+            continue
+        raise SyntaxError(f"строка не разобрана: {line!r}")
+    if entry is None:
+        raise SyntaxError("нет строки entry")
+    return fns, entry
 
-# ---- компилятор ----
+# ---------- компиляция ----------
 
-class Fn:
+class FnCompiler:
     def __init__(self, name, params):
-        self.name = name; self.params = params
-        self.code = []; self.labels = {}; self.pend = []
-    def emit(self, op, args=None):
-        self.code.append({"op": op, "args": args if args is not None else []})
-        return len(self.code) - 1
-    def label(self, name):
-        self.labels[name] = len(self.code)
-    def patch(self):
-        for idx, lbl in self.pend:
-            self.code[idx]["args"] = [self.labels[lbl]]
+        self.name = name
+        self.slots = {}
+        self.code = []
+        for p in params:
+            self.slot(p)
+    def slot(self, nm):
+        if nm not in self.slots:
+            self.slots[nm] = len(self.slots)
+        return self.slots[nm]
+    def temp(self, hint):
+        nm = hint + str(len(self.slots))
+        self.slot(nm)
+        return nm
+    def emit(self, op, arg=None):
+        self.code.append([op, arg])
+    def compile_expr(self, node):
+        k = node[0]
+        if k == "num":
+            self.emit("PUSH", node[1])
+        elif k == "var":
+            self.emit("LOAD", self.slot(node[1]))
+        elif k == "bin":
+            self.compile_expr(node[2])
+            self.compile_expr(node[3])
+            self.emit({"+" : "ADD", "-": "SUB", "*": "MUL"}[node[1]])
+        elif k == "call":
+            name, argnodes = node[1], node[2]
+            if name == "succ":
+                if len(argnodes) != 1:
+                    raise SyntaxError("succ принимает 1 аргумент")
+                self.compile_expr(argnodes[0])
+                self.emit("PUSH", 1)
+                self.emit("ADD")
+            else:
+                if name not in KNOWN_FNS:
+                    raise NameError(f"функция {name} не определена")
+                for aexpr in argnodes:
+                    self.compile_expr(aexpr)
+                self.emit("CALL", [name, len(argnodes)])
+        elif k == "prec":
+            self.compile_prec(node)
+        else:
+            raise RuntimeError(f"неизвестный узел {k}")
+    def compile_prec(self, node):
+        c_expr, g_expr, h_ref = node[1], node[2], node[3][1]
+        if h_ref not in KNOWN_FNS:
+            raise NameError(f"функция шага {h_ref} не определена")
+        N = self.temp("N"); C = self.temp("C"); ACC = self.temp("ACC")
+        self.compile_expr(c_expr)
+        self.emit("STORE", self.slots[N])
+        self.compile_expr(g_expr)
+        self.emit("STORE", self.slots[ACC])
+        self.emit("PUSH", 0)
+        self.emit("STORE", self.slots[C])         # i = 0
+        l1 = len(self.code)                       # начало цикла
+        self.emit("LOAD", self.slots[N])
+        self.emit("LOAD", self.slots[C])
+        self.emit("SUB")                          # N-C >= 0: V не падает в минус
+        jz_idx = len(self.code)
+        self.emit("JZ")                           # C-N == 0 -> l2; патчить
+        self.emit("LOAD", self.slots[C])          # arg0 = i (0..N-1)
+        self.emit("LOAD", self.slots[ACC])        # arg1 = acc
+        self.emit("CALL", [h_ref, 2])
+        self.emit("STORE", self.slots[ACC])
+        self.emit("LOAD", self.slots[C])
+        self.emit("PUSH", 1)
+        self.emit("ADD")
+        self.emit("STORE", self.slots[C])
+        self.emit("JMP", l1)
+        l2 = len(self.code)
+        self.code[jz_idx][1] = l2
+        self.emit("LOAD", self.slots[ACC])        # результат — на стек
 
-def compile_expr(e, fn, defs, prec_fns):
-    k = e[0]
-    if k == 'lit':
-        fn.emit('LOADI', [e[1]]); return
-    if k == 'var':
-        fn.emit('LOADA', [fn.params.index(e[1])]); return
-    name, args = e[1], e[2]
-    if name == 'succ':
-        compile_expr(args[0], fn, defs, prec_fns)
-        fn.emit('PUSH'); fn.emit('LOADI', [1]); fn.emit('ADD'); return
-    if name in ('add', 'mul'):
-        compile_expr(args[0], fn, defs, prec_fns); fn.emit('PUSH')
-        compile_expr(args[1], fn, defs, prec_fns); fn.emit('PUSH')
-        fn.emit('ADD' if name == 'add' else 'MUL'); return
-    if name == 'prec':
-        n_e, g_e, h_e = args
-        hname = h_e[1]
-        if g_e[0] != 'lit':
-            raise SyntaxError("g в prec — пока только литерал")
-        if hname not in defs or len(defs[hname][0]) != 2:
-            raise SyntaxError("h в prec — должен быть def с 2 параметрами")
-        j = "p%d" % len(prec_fns)
-        # место вызова: вычислить n, положить на стек, CALL
-        compile_expr(n_e, fn, defs, prec_fns)
-        fn.emit('PUSH')
-        fn.emit('CALL', [j, 1])
-        # сабрутина prec
-        sub = Fn(j, ["n"])
-        sub.emit('LOADA', [0]); sub.emit('STORER', ["n"])
-        sub.emit('LOADR', ["n"]); sub.emit('PUSH')
-        sub.emit('LOADI', [0]); sub.emit('PUSH'); sub.emit('EQ')
-        ji = sub.emit('JZ', None); sub.pend.append((ji, "rec"))
-        sub.emit('LOADI', [g_e[1]])
-        je = sub.emit('JMP', None); sub.pend.append((je, "end"))
-        sub.label("rec")
-        sub.emit('LOADR', ["n"]); sub.emit('PUSH'); sub.emit('LOADI', [1]); sub.emit('SUB')
-        sub.emit('STORER', ["m"])
-        sub.emit('LOADR', ["m"]); sub.emit('PUSH')   # будущий аргумент 1 для h
-        sub.emit('LOADR', ["m"]); sub.emit('PUSH')   # аргумент для рекурсивного CALL
-        sub.emit('CALL', [j, 1])                     # V = prec(n-1)
-        sub.emit('PUSH')                             # стек: [n-1, acc]
-        sub.emit('CALL', [hname, 2])                 # V = h(n-1, acc)
-        sub.emit('RET')
-        sub.label("end")
-        sub.emit('RET')
-        prec_fns[j] = sub
-        return
-    if name in defs:
-        for a in args:
-            compile_expr(a, fn, defs, prec_fns)
-            fn.emit('PUSH')
-        fn.emit('CALL', [name, len(args)])
-        return
-    raise NameError("неизвестное имя: %r" % name)
+KNOWN_FNS = set()
+
+def compile_program(text):
+    fns, entry = parse_program(normalize(text))
+    KNOWN_FNS.update(fns.keys())
+    prog = {
+        "fmt": "sound-v0.3",
+        "src_sha256": sha256_of(text),
+        "entry": entry["name"],
+        "fns": {},
+    }
+    for name, f in fns.items():
+        comp = FnCompiler(name, f["params"])
+        comp.compile_expr(f["body"])
+        if not comp.code or comp.code[-1][0] != "RET":
+            comp.emit("RET")
+        slots = [None] * len(comp.slots)
+        for nm, idx in comp.slots.items():
+            slots[idx] = nm
+        prog["fns"][name] = {
+            "params": f["params"],
+            "slots": slots,
+            "code": comp.code,
+        }
+    comp = FnCompiler("main", [])
+    for aexpr in entry["args"]:
+        comp.compile_expr(aexpr)
+    comp.emit("CALL", [entry["name"], len(entry["args"])])
+    comp.emit("HALT")
+    prog["main"] = {"code": comp.code}
+    # метки компилировались в локальных координатах функции,
+    # исполняются в глобальных — перебазируем при сборке
+    offset = len(prog["main"]["code"])
+    for f in prog["fns"].values():
+        for ins in f["code"]:
+            if ins[0] in ("JZ", "JMP"):
+                ins[1] += offset
+        offset += len(f["code"])
+    return prog
 
 def main():
-    src_path, out_path = sys.argv[1], sys.argv[2]
-    text = open(src_path, encoding='utf-8').read()
-    defs, entry = parse(text)
-    fns, prec_fns = {}, {}
-    for name, (params, rhs) in defs.items():
-        f = Fn(name, params)
-        compile_expr(parse_expr(rhs), f, defs, prec_fns)
-        f.emit('RET')
-        f.patch()
-        fns[name] = f
-    for j, sub in prec_fns.items():
-        sub.patch()
-        fns[j] = sub
-    mainf = Fn("main", [])
-    for a in entry[1]:
-        mainf.emit('LOADI', [a]); mainf.emit('PUSH')
-    mainf.emit('CALL', [entry[0], len(entry[1])])
-    mainf.emit('HALT')
-    mainf.patch()
-    prog = {
-        "spec": "mm-sound-v0.3",
-        "src_sha256": hashlib.sha256(normalize(text).encode('utf-8')).hexdigest(),
-        "entry": {"fn": entry[0], "args": entry[1]},
-        "main": mainf.code,
-        "fns": {name: {"params": f.params, "code": f.code} for name, f in fns.items()},
-    }
-    json.dump(prog, open(out_path, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
-    n_instr = sum(len(f.code) for f in fns.values()) + len(mainf.code)
-    print("compiled fns=%d instrs=%d" % (len(fns) + 1, n_instr))
-    print("sha256=%s" % prog["src_sha256"])
+    src_path = sys.argv[1] if len(sys.argv) > 1 else "fact.pr"
+    out_path = sys.argv[2] if len(sys.argv) > 2 else "fact.sound.json"
+    text = open(src_path, encoding="utf-8").read()
+    prog = compile_program(text)
+    n_instr = sum(len(f["code"]) for f in prog["fns"].values()) + len(prog["main"]["code"])
+    import json
+    with open(out_path, "w", encoding="utf-8") as fh:
+        json.dump(prog, fh, ensure_ascii=False, indent=1)
+    print(f"функций: {len(prog['fns'])} (без main)")
+    print(f"инструкций: {n_instr} (все функции + main)")
+    print(f"fmt={prog['fmt']}  src_sha256={prog['src_sha256'][:16]}…")
+    print(f"записано: {out_path}")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

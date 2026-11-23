@@ -1,0 +1,162 @@
+{
+ "fmt": "sound-v0.3",
+ "src_sha256": "65d4651da02b514b3bb00f99e9686ef09f566a934753652048f3d24c154f7a12",
+ "entry": "fact",
+ "fns": {
+  "fact": {
+   "params": [
+    "n"
+   ],
+   "slots": [
+    "n",
+    "N1",
+    "C2",
+    "ACC3"
+   ],
+   "code": [
+    [
+     "LOAD",
+     0
+    ],
+    [
+     "STORE",
+     1
+    ],
+    [
+     "PUSH",
+     1
+    ],
+    [
+     "STORE",
+     3
+    ],
+    [
+     "PUSH",
+     0
+    ],
+    [
+     "STORE",
+     2
+    ],
+    [
+     "LOAD",
+     1
+    ],
+    [
+     "LOAD",
+     2
+    ],
+    [
+     "SUB",
+     null
+    ],
+    [
+     "JZ",
+     22
+    ],
+    [
+     "LOAD",
+     2
+    ],
+    [
+     "LOAD",
+     3
+    ],
+    [
+     "CALL",
+     [
+      "h",
+      2
+     ]
+    ],
+    [
+     "STORE",
+     3
+    ],
+    [
+     "LOAD",
+     2
+    ],
+    [
+     "PUSH",
+     1
+    ],
+    [
+     "ADD",
+     null
+    ],
+    [
+     "STORE",
+     2
+    ],
+    [
+     "JMP",
+     9
+    ],
+    [
+     "LOAD",
+     3
+    ],
+    [
+     "RET",
+     null
+    ]
+   ]
+  },
+  "h": {
+   "params": [
+    "n",
+    "acc"
+   ],
+   "slots": [
+    "n",
+    "acc"
+   ],
+   "code": [
+    [
+     "LOAD",
+     1
+    ],
+    [
+     "LOAD",
+     0
+    ],
+    [
+     "PUSH",
+     1
+    ],
+    [
+     "ADD",
+     null
+    ],
+    [
+     "MUL",
+     null
+    ],
+    [
+     "RET",
+     null
+    ]
+   ]
+  }
+ },
+ "main": {
+  "code": [
+   [
+    "PUSH",
+    5
+   ],
+   [
+    "CALL",
+    [
+     "fact",
+     1
+    ]
+   ],
+   [
+    "HALT",
+    null
+   ]
+  ]
+ }
+}

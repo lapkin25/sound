@@ -1,141 +1,203 @@
 #!/usr/bin/env python3
-# run_pr.py v0.3 — прямой интерпретатор PR-языка (дорога «прямая»)
-# PR v0.3. Конструкции:
-#   def f(a, b) = <expr>            — определение функции
-#   succ(e), add(e1,e2), mul(e1,e2) — встроенные операции
-#   prec(n, g, h)                   — схема примитивной рекурсии:
-#         f(0) = g;  f(k+1) = h(k, f(k))
-#     развёртка рекурсивная, вниз: prec(n,g,h) = g при n=0,
-#     иначе h(n-1, prec(n-1,g,h)). Счётчик — первый аргумент шага (наша конвенция).
-#     g — пока только целочисленный литерал; h — имя def с 2 параметрами (counter, acc)
-#   entry f(a1, ...)                — точка входа в тексте программы
-# Комментарии: от ';' до конца строки.
-# Хеш программы: sha256 от нормализованного текста (построчный rstrip,
-# пустые строки выброшены) — решение D3 из спецификации Math Machine v0.1.
-import sys, re, hashlib
+# run_pr.py v0.3.1 — прямой интерпретатор PR («прямая дорога»)
+#
+# Схема записи .pr:
+#   def имя(параметры) = выражение
+#   entry имя(аргументы)
+# Выражения: литералы, имена, вызовы, + - *, succ(x), prec(c, g, h).
+# Схема prec (счётчик — первый аргумент):
+#   f(0)   = g
+#   f(n+1) = h(n, f(n))
+#
+# Вывод: value, steps, sha256 нормализованного текста.
+# Нормализация: построчный rstrip, пустые строки отбрасываются.
+
+import sys, hashlib, re
+
+# ---------- нормализация и хеш ----------
 
 def normalize(text):
-    lines = [l.rstrip() for l in text.splitlines()]
-    return "\n".join(l for l in lines if l.strip())
+    lines = [ln.rstrip() for ln in text.splitlines()]
+    return "\n".join(ln for ln in lines if ln.strip())
 
-def strip_comment(line):
-    i = line.find(';')
-    return line[:i] if i >= 0 else line
+def sha256_of(text):
+    return hashlib.sha256(normalize(text).encode("utf-8")).hexdigest()
 
-def parse(text):
-    defs, entry = {}, None
-    for raw in text.splitlines():
-        line = strip_comment(raw).strip()
-        if not line:
-            continue
-        m = re.match(r'^def\s+(\w+)\s*\(([^)]*)\)\s*=\s*(.+)$', line)
-        if m:
-            params = [p.strip() for p in m.group(2).split(',') if p.strip()]
-            defs[m.group(1)] = (params, parse_expr(m.group(3).strip()))
-            continue
-        m = re.match(r'^entry\s+(\w+)\s*\(([^)]*)\)\s*$', line)
-        if m:
-            args = [int(x.strip()) for x in m.group(2).split(',') if x.strip()]
-            entry = (m.group(1), args)
-            continue
-        raise SyntaxError("не разобрать строку: %r" % line)
-    if entry is None:
-        raise SyntaxError("нет строки entry")
-    return defs, entry
+# ---------- разбор ----------
+
+DEF_RE = re.compile(r"^def\s+([A-Za-z_]\w*)\s*\(([^()]*)\)\s*=\s*(.+)$")
+ENTRY_RE = re.compile(r"^entry\s+([A-Za-z_]\w*)\s*\(([^()]*)\)\s*$")
 
 def tokenize(s):
-    return re.findall(r'\d+|\w+|[(),]', s)
+    toks = []
+    i = 0
+    while i < len(s):
+        c = s[i]
+        if c.isspace():
+            i += 1
+        elif c.isdigit():
+            j = i
+            while j < len(s) and s[j].isdigit():
+                j += 1
+            toks.append(("num", int(s[i:j]))); i = j
+        elif c.isalpha() or c == "_":
+            j = i
+            while j < len(s) and (s[j].isalnum() or s[j] == "_"):
+                j += 1
+            toks.append(("name", s[i:j])); i = j
+        elif c in "+-*(),":
+            toks.append(("op", c)); i += 1
+        else:
+            raise SyntaxError(f"неожиданный символ {c!r} в {s!r}")
+    toks.append(("end", None))
+    return toks
 
-class Tok:
+class Parser:
     def __init__(self, toks):
-        self.t = toks; self.i = 0
+        self.toks = toks; self.i = 0
     def peek(self):
-        return self.t[self.i] if self.i < len(self.t) else None
-    def take(self):
-        t = self.peek(); self.i += 1; return t
+        return self.toks[self.i]
+    def next(self):
+        t = self.toks[self.i]; self.i += 1; return t
+    def expect(self, kind, val):
+        t = self.next()
+        if t != (kind, val):
+            raise SyntaxError(f"ожидалось {val!r}, найдено {t!r}")
+    def expr(self):
+        node = self.term()
+        while self.peek() == ("op", "+") or self.peek() == ("op", "-"):
+            op = self.next()[1]
+            node = ("bin", op, node, self.term())
+        return node
+    def term(self):
+        node = self.atom()
+        while self.peek() == ("op", "*"):
+            self.next()
+            node = ("bin", "*", node, self.atom())
+        return node
+    def atom(self):
+        t = self.next()
+        if t == ("op", "("):
+            e = self.expr()
+            self.expect("op", ")")
+            return e
+        if t[0] == "num":
+            return ("num", t[1])
+        if t[0] == "name":
+            if self.peek() == ("op", "("):
+                self.next()
+                args = [self.expr()]
+                while self.peek() == ("op", ","):
+                    self.next()
+                    args.append(self.expr())
+                self.expect("op", ")")
+                if t[1] == "prec":
+                    if len(args) != 3:
+                        raise SyntaxError("prec принимает 3 аргумента: prec(c, g, h)")
+                    if args[2][0] != "var":
+                        raise SyntaxError("шаг prec задаётся именем функции")
+                    return ("prec", args[0], args[1], args[2])
+                return ("call", t[1], args)
+            return ("var", t[1])
+        raise SyntaxError(f"неожиданный токен {t!r}")
 
 def parse_expr(s):
-    t = Tok(tokenize(s))
-    e = expr(t)
-    if t.peek() is not None:
-        raise SyntaxError("лишние токены в: %r" % s)
-    return e
+    p = Parser(tokenize(s))
+    node = p.expr()
+    if p.peek() != ("end", None):
+        raise SyntaxError(f"хвост выражения не разобран: {p.peek()!r}")
+    return node
 
-def expr(t):
-    x = t.take()
-    if x is None:
-        raise SyntaxError("обрыв выражения")
-    if x.isdigit():
-        return ('lit', int(x))
-    if re.match(r'^\w+$', x):
-        if t.peek() == '(':
-            t.take()
+def parse_program(text):
+    fns = {}
+    entry = None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith(";"):
+            continue
+        m = DEF_RE.match(line)
+        if m:
+            fns[m.group(1)] = {
+                "params": [p.strip() for p in m.group(2).split(",") if p.strip()],
+                "body": parse_expr(m.group(3)),
+            }
+            continue
+        m = ENTRY_RE.match(line)
+        if m:
+            toks = tokenize(m.group(2))
             args = []
-            if t.peek() != ')':
-                args.append(expr(t))
-                while t.peek() == ',':
-                    t.take(); args.append(expr(t))
-            if t.take() != ')':
-                raise SyntaxError("ожидалась )")
-            return ('call', x, args)
-        return ('var', x)
-    raise SyntaxError("неожиданный токен %r" % x)
+            if toks[0] != ("end", None):
+                p = Parser(toks)
+                args.append(p.expr())
+                while p.peek() == ("op", ","):
+                    p.next()
+                    args.append(p.expr())
+            entry = {"name": m.group(1), "args": args}
+            continue
+        raise SyntaxError(f"строка не разобрана: {line!r}")
+    if entry is None:
+        raise SyntaxError("нет строки entry")
+    return fns, entry
 
-STEPS = 0
+# ---------- исполнение ----------
 
-def evaluate(e, env, defs):
-    global STEPS
-    k = e[0]
-    if k == 'lit':
-        return e[1]
-    if k == 'var':
-        return env[e[1]]
-    name, args = e[1], e[2]
-    if name == 'succ':
-        STEPS += 1
-        return evaluate(args[0], env, defs) + 1
-    if name == 'add':
-        STEPS += 1
-        return evaluate(args[0], env, defs) + evaluate(args[1], env, defs)
-    if name == 'mul':
-        STEPS += 1
-        return evaluate(args[0], env, defs) * evaluate(args[1], env, defs)
-    if name == 'prec':
-        n = evaluate(args[0], env, defs)
-        g = args[1]
-        if g[0] != 'lit':
-            raise SyntaxError("g в prec — только литерал")
-        hname = args[2][1]
-        hparams, hbody = defs[hname]
-        def rec(k):
-            global STEPS
-            if k == 0:
-                return g[1]
-            STEPS += 1
-            acc = rec(k - 1)
-            henv = {hparams[0]: k - 1, hparams[1]: acc}
-            return evaluate(hbody, henv, defs)
-        return rec(n)
-    if name in defs:
-        params, body = defs[name]
-        vals = [evaluate(a, env, defs) for a in args]
-        return evaluate(body, dict(zip(params, vals)), defs)
-    raise NameError("неизвестное имя: %r" % name)
+class Interp:
+    def __init__(self, fns):
+        self.fns = fns
+        self.steps = 0
+    def eval(self, node, env):
+        k = node[0]
+        if k == "num":
+            return node[1]
+        if k == "var":
+            if node[1] not in env:
+                raise NameError(f"имя {node[1]} не определено")
+            return env[node[1]]
+        if k == "bin":
+            op, l, r = node[1], node[2], node[3]
+            a = self.eval(l, env); b = self.eval(r, env)
+            self.steps += 1
+            return a + b if op == "+" else a - b if op == "-" else a * b
+        if k == "call":
+            name, argnodes = node[1], node[2]
+            if name == "succ":
+                x = self.eval(argnodes[0], env)
+                self.steps += 1
+                return x + 1
+            f = self.fns.get(name)
+            if f is None:
+                raise NameError(f"функция {name} не определена")
+            args = [self.eval(x, env) for x in argnodes]
+            return self.eval(f["body"], dict(zip(f["params"], args)))
+        if k == "prec":
+            c_expr, g_expr, h_ref = node[1], node[2], node[3]
+            h = self.fns.get(h_ref[1])
+            if h is None:
+                raise NameError(f"функция шага {h_ref[1]} не определена")
+            if len(h["params"]) != 2:
+                raise SyntaxError("функция шага prec принимает 2 параметра: h(n, acc)")
+            n = self.eval(c_expr, env)
+            v = self.eval(g_expr, env)
+            p0, p1 = h["params"]
+            for i in range(n):
+                self.steps += 1
+                v = self.eval(h["body"], {p0: i, p1: v})
+            return v
+        raise RuntimeError(f"неизвестный узел {k}")
 
 def main():
-    path = sys.argv[1]
-    text = open(path, encoding='utf-8').read()
-    defs, entry = parse(text)
-    fn, argv = entry
-    if fn not in defs:
-        raise NameError("entry указывает на неизвестную функцию: %r" % fn)
-    params, body = defs[fn]
-    env = dict(zip(params, argv))
-    value = evaluate(body, env, defs)
-    h = hashlib.sha256(normalize(text).encode('utf-8')).hexdigest()
-    print("value=%d" % value)
-    print("steps=%d" % STEPS)
-    print("sha256=%s" % h)
+    path = sys.argv[1] if len(sys.argv) > 1 else "fact.pr"
+    text = open(path, encoding="utf-8").read()
+    fns, entry = parse_program(normalize(text))
+    interp = Interp(fns)
+    f = fns.get(entry["name"])
+    if f is None:
+        raise NameError(f"entry-функция {entry['name']} не определена")
+    args = [interp.eval(x, {}) for x in entry["args"]]
+    value = interp.eval(f["body"], dict(zip(f["params"], args)))
+    print(f"value={value}")
+    print(f"steps={interp.steps}")
+    print(f"sha256={sha256_of(text)}")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
