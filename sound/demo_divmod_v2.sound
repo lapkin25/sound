@@ -1,0 +1,14 @@
+# DemoDivModV2 — разложение числа на цифры без старших нулей
+# формат sound-0.5.3, грамматика v0.5.1 (frozen), словарь v0.5.3
+# вердикт B аудита О.5: значимость позиции k = div n 10^k > 0
+# superseded: demo_divmod.sound (v1, финал с ведущим нулём)
+
+fact n = 45
+
+rule q100 = div n 100
+rule q10 = div n 10
+rule dt = mod q10 10
+rule du = mod n 10
+rule hlist = if (lt 0 q100) (snoc nil q100) nil
+rule tlist = if (lt 0 q10) (snoc hlist dt) hlist
+out digits = snoc tlist du

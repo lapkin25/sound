@@ -1,0 +1,57 @@
+# DemoPipelineV2.journal | fingerprint 1541eb1a1ce546dedb4d973de2c85543e5942ef9478e5f07a9405e699f019e7e
+# superseded: demo_pipeline.journal (v1) (вердикт B аудита О.5)
+t0001 const [] -> []
+t0002 const 1 -> 1
+t0003 snoc t0001 t0002 -> [1]
+t0004 const 0 -> 0
+t0005 snoc t0003 t0004 -> [1,0]
+t0006 const 1 -> 1
+t0007 snoc t0005 t0006 -> [1,0,1]
+t0008 const 1 -> 1
+t0009 snoc t0007 t0008 -> [1,0,1,1]
+t0010 const 0 -> 0
+t0011 snoc t0009 t0010 -> [1,0,1,1,0]
+t0012 const 1 -> 1
+t0013 snoc t0011 t0012 -> [1,0,1,1,0,1]
+t0014 const 0 -> 0
+t0015 const 0 -> 0
+t0016 part t0013 t0015 -> 1
+t0017 plus t0014 t0014 -> 0
+t0018 plus t0017 t0016 -> 1
+t0019 const 1 -> 1
+t0020 part t0013 t0019 -> 0
+t0021 plus t0018 t0018 -> 2
+t0022 plus t0021 t0020 -> 2
+t0023 const 2 -> 2
+t0024 part t0013 t0023 -> 1
+t0025 plus t0022 t0022 -> 4
+t0026 plus t0025 t0024 -> 5
+t0027 const 3 -> 3
+t0028 part t0013 t0027 -> 1
+t0029 plus t0026 t0026 -> 10
+t0030 plus t0029 t0028 -> 11
+t0031 const 4 -> 4
+t0032 part t0013 t0031 -> 0
+t0033 plus t0030 t0030 -> 22
+t0034 plus t0033 t0032 -> 22
+t0035 const 5 -> 5
+t0036 part t0013 t0035 -> 1
+t0037 plus t0034 t0034 -> 44
+t0038 plus t0037 t0036 -> 45
+t0039 const 100 -> 100
+t0040 div t0038 t0039 -> 0
+t0041 const 10 -> 10
+t0042 div t0038 t0041 -> 4
+t0043 const 10 -> 10
+t0044 mod t0042 t0043 -> 4
+t0045 const 10 -> 10
+t0046 mod t0038 t0045 -> 5
+t0047 const 0 -> 0
+t0048 lt t0047 t0040 -> 0
+t0049 const [] -> []
+t0050 snoc t0049 t0040 -> [0]
+t0051 if t0048 t0050 t0049 -> []
+t0052 lt t0047 t0042 -> 1
+t0053 snoc t0051 t0044 -> [4]
+t0054 if t0052 t0053 t0051 -> [4]
+t0055 snoc t0054 t0046 -> [4,5]

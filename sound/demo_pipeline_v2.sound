@@ -1,0 +1,31 @@
+# DemoPipelineV2 — bits → Горнер → цифры без старших нулей
+# формат sound-0.5.3, грамматика v0.5.1 (frozen), словарь v0.5.3
+# вердикт B аудита О.5: значимость позиции = div n 10^k > 0
+# superseded: demo_pipeline.sound (v1)
+
+fact bits = snoc (snoc (snoc (snoc (snoc (snoc nil 1) 0) 1) 1) 0) 1
+
+rule acc0 = 0
+rule b0 = part bits 0
+rule a1 = plus (plus acc0 acc0) b0
+rule b1 = part bits 1
+rule a2 = plus (plus a1 a1) b1
+rule b2 = part bits 2
+rule a3 = plus (plus a2 a2) b2
+rule b3 = part bits 3
+rule a4 = plus (plus a3 a3) b3
+rule b4 = part bits 4
+rule a5 = plus (plus a4 a4) b4
+rule b5 = part bits 5
+rule a6 = plus (plus a5 a5) b5
+
+rule q100 = div a6 100
+rule dh = q100
+rule q10 = div a6 10
+rule dt = mod q10 10
+rule du = mod a6 10
+rule hlist = if (lt 0 q100) (snoc nil dh) nil
+rule tlist = if (lt 0 q10) (snoc hlist dt) hlist
+
+out dec = a6
+out digits = snoc tlist du
