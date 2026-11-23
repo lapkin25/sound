@@ -1,0 +1,4 @@
+; inv_balance.mmx — инвариант баланса стека на реальном протоколе
+; A3: число CALL равно числу RET (на записи HALT, то есть по всему протоколу)
+(forall s (implies (= s.op "HALT")
+  (= (count r (where (= r.op "CALL"))) (count r (where (= r.op "RET"))))))
