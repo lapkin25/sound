@@ -1,0 +1,10 @@
+# .pr v0.1 draft — определенческий язык примитивно рекурсивных функций
+# Схемы: z, s, pi(k,i), comp[f, ...], prec[g, h]
+# Семантика prec: f(0, x) = g(x);  f(n+1, x) = h(n, f(n, x), x)
+
+def one  = comp[s, z]
+def add  = prec[pi(2,2), comp[s, pi(3,2)]]
+def mul  = prec[z, comp[add, pi(3,2), pi(3,3)]]
+def fact = prec[one, comp[mul, comp[s, pi(2,1)], pi(2,2)]]
+
+entry fact(5)
