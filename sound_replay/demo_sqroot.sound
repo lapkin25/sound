@@ -1,0 +1,17 @@
+# demo_sqroot — квадрат и целая часть квадратного корня 472
+# звук-файл sound-0.6.1 (draft: bounded while), словарь v0.6
+# Кейс ступени 2: первый bounded while. sq — примитив mul (v0.6), 1 шаг.
+
+fact n = 472
+
+# Ньютон целочисленный: x0 = n; y = (x + n div x) div 2; цикл пока y < x.
+# bound: итераций <= 2*ceil(log2 n) + 2 (усреднение ужимает x над корнем);
+#        для n = 472 граница 20; трасса в уме даёт ровно 7.
+while lt y x:
+  x = y
+  y = div (plus x (div n x)) 2
+
+out r  = x                                 # isqrt(n)
+out s  = mul r r                           # квадрат корня
+out c1 = lt (mul r r) (plus n 1)           # r^2 <= n
+out c2 = lt n (mul (plus r 1) (plus r 1))  # n < (r+1)^2

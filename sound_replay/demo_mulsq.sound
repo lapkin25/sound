@@ -1,0 +1,18 @@
+# demo_mulsq — сумма квадратов цифр 472
+# словарь v0.6 (frozen 0.5.3 + mul), deref-канон
+# Ступень 1 управления: foldlist по вычисленному списку.
+# Число итераций управляется данными: длина tail-цепочки списка digits.
+# Поверхностная форма foldlist разворачивается в шаги по канону;
+# канонический образ программы — журнал (demo_mulsq.journal).
+
+fact n = 472
+
+rule h = div n 100
+rule r = mod n 100
+rule t = div r 10
+rule u = mod r 10
+rule digits = snoc (snoc (snoc nil h) t) u
+
+rule sqstep acc d = plus acc (mul d d)
+
+out sum_sq = foldlist digits 0 sqstep
