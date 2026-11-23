@@ -1,0 +1,4 @@
+# add(0,y) = y ; mul(0,y) = 0 ; mul(n+1,y) = add(mul(n,y), y)
+def add = prec[ pi(2,2), comp[ s, pi(3,2) ] ]
+def mul = prec[ z, comp[ add, pi(3,2), pi(3,3) ] ]
+entry mul(6,7)
