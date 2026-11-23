@@ -1,0 +1,2 @@
+def mul = comp[plus, pi(2,1), pi(2,2)]
+entry mul(6,7)
