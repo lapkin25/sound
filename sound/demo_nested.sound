@@ -1,0 +1,25 @@
+# demo_nested — сумма квадратов цифр 45
+# звук-файл sound-0.5.3, frozen-словарь v0.5.3, deref-канон
+# Кейс (в): вложенный foldlist — последняя нетестированная зона frozen-грамматики.
+#
+# Внешний foldlist: по digits, аккумулятор — сумма квадратов.
+# Внутренний foldlist: по заготовке g (6 нулей), аккумулятор-пара [s, p]:
+#   s — счётчик шагов (наращивается единицей), p — частичная сумма;
+#   term = if (lt s d) d (part g s) — при flag=1 прибавляется d,
+#   при flag=0 элемент заготовки (ноль) даёт нулевой вклад.
+# Элемент заготовки потребляется по индексу-счётчику: part g s.
+# Ограничение ширины: mul(n, n) корректен для n <= 6 (статическая заготовка).
+# Поверхностные формы foldlist/проекция пары разворачиваются в шаги по канону;
+# канонический образ программы — журнал (см. demo_nested.journal).
+
+fact digits = [4,5]
+fact g      = [0,0,0,0,0,0]
+
+rule pair_init = snoc (snoc nil 0) 0
+
+rule inner_step d [s, p] e = [plus s 1, plus p (if (lt s d) d e)]
+
+rule sq d = snd (foldlist g pair_init (inner_step d))
+
+out sum_sq = foldlist digits 0 sqacc where
+  sqacc acc d = plus acc (sq d)

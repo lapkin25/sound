@@ -1,0 +1,26 @@
+# demo_digroot — цифровой корень 472 (кейс (г): два независимых вывода, кросс-сверка)
+# формат sound-0.5.3, грамматика v0.5.3 (frozen), deref-канон
+# fingerprint: 7ffe337769ce6085e4b30fd88d7ab5ce33f96314964ac9607612fb7baaac01a1
+# n = 472; предсказание: 21 = 7 const + 5 (формула) + 9 (разложение, два прохода)
+# out dr_formula = t0010, out dr_unfold = t0021; согласие outs — внутренняя кросс-сверка
+t0001 const 472 -> 472 ; n
+t0002 const -1 -> -1
+t0003 plus t0001 t0002 -> 471 ; n-1
+t0004 const 9 -> 9
+t0005 mod t0003 t0004 -> 3 ; (n-1) mod 9
+t0006 const 1 -> 1
+t0007 plus t0006 t0005 -> 4 ; 1 + (n-1) mod 9
+t0008 const 0 -> 0
+t0009 lt t0008 t0001 -> 1 ; 0 < n
+t0010 if t0009 t0007 t0008 -> 4 ; OUT dr_formula
+t0011 const 100 -> 100
+t0012 div t0001 t0011 -> 4 ; hundreds
+t0013 mod t0001 t0011 -> 72 ; rest
+t0014 const 10 -> 10
+t0015 div t0013 t0014 -> 7 ; tens
+t0016 mod t0013 t0014 -> 2 ; units
+t0017 plus t0012 t0015 -> 11 ; h + t
+t0018 plus t0017 t0016 -> 13 ; s1 = 4+7+2
+t0019 div t0018 t0014 -> 1 ; tens of s1
+t0020 mod t0018 t0014 -> 3 ; units of s1
+t0021 plus t0019 t0020 -> 4 ; OUT dr_unfold
