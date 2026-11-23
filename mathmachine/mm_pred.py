@@ -315,6 +315,13 @@ class Engine:
 
         if h in ('forall', 'exists', 'exists1'):
             if len(v) != 3:
+                for q in v[1:]:
+                    if (isinstance(q, tuple) and q[0] == 'expr' and q[1]
+                            and q[1][0] == ('sym', 'where')):
+                        raise MMError(
+                            '%s не принимает (where ...): похоже, файл старого '
+                            'синтаксиса. Новый язык: (exists1 v P), а для '
+                            'CALL/RET-пары — (bind r (where G) B)' % h)
                 raise MMError('%s требует (v P) или ([a b] P)' % h)
             return self._quant(h, v[1], v[2], env)
 

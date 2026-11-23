@@ -1,7 +1,4 @@
-; inv_pair.mmx — инвариант парности на реальном протоколе fact.sound.jsonl
-; A2: у каждого CALL существует ровно один парный RET (тот же cid),
-;     и глубины согласованы. cid — канал связи инстанции вызова;
-;     depth — резервный канал; совпадение обоих = корректная пара.
-(forall s (implies (= s.op "CALL")
-  (exists1 r (where (and (= r.op "RET") (= r.cid s.cid)))
-    (= r.depth s.depth))))
+; inv_pair.mmx — каждому CALL есть парный RET той же глубины, cid совпадает
+(forall c (implies (= c.op "CALL")
+  (bind r (where (and (= r.op "RET") (= r.depth c.depth)))
+    (= r.cid c.cid))))
