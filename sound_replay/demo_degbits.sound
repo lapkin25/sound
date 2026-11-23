@@ -1,0 +1,31 @@
+# demo_decbits — перевод 472 в двоичную запись и обратное восстановление (кейс (е))
+# звук-файл v0.6, грамматика v0.6.1 (bounded while), deref-канон
+# Ступень 2: while по условию. Ступень 1: цикл2 потребляет вычисленный список.
+# Первый кейс, чей результат — список, а не скаляр.
+# Кросс-сверка: цикл 2 восстанавливает n из битов, eq обязан дать 1.
+
+fact n = 472
+
+# цикл 1: биты по mod 2, младшие вперёд
+bits := nil
+x := n
+while 0 < x do
+  d    := x mod 2
+  bits := snoc bits d
+  x    := x div 2
+end bound: 10          # bitlength(n) + 1 = 9 + 1
+
+# цикл 2: восстановление по степеням двойки
+acc  := 0
+p    := 1
+rest := bits
+while 0 < len rest do
+  b    := part rest 0
+  acc  := acc + b * p
+  p    := p * 2
+  rest := tail rest
+end bound: 10
+
+out bits     = bits
+out restored = acc
+out eq = if acc < n then 0 else (if n < acc then 0 else 1)
