@@ -166,6 +166,11 @@ class Interp:
                 return x + 1
             f = self.fns.get(name)
             if f is None:
+                if name == "ifz":
+                    if len(argnodes) != 3:
+                        raise SyntaxError("ifz принимает 3 аргумента: ifz(c, тогда, иначе)")
+                    c = self.eval(argnodes[0], env)
+                    return self.eval(argnodes[1] if c == 0 else argnodes[2], env)
                 raise NameError(f"функция {name} не определена")
             args = [self.eval(x, env) for x in argnodes]
             return self.eval(f["body"], dict(zip(f["params"], args)))
