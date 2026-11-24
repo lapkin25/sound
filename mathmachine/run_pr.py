@@ -181,7 +181,9 @@ class Interp:
             p0, p1 = h["params"]
             for i in range(n):
                 self.steps += 1
-                v = self.eval(h["body"], {p0: i, p1: v})
+                #v = self.eval(h["body"], {p0: i, p1: v})
+                env2 = dict(env); env2[p0] = i; env2[p1] = v
+                v = self.eval(h["body"], env2)
             return v
         raise RuntimeError(f"неизвестный узел {k}")
 
