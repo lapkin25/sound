@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-# pr2sound.py v0.3.1 — компилятор PR → звуковая машина
+# pr2sound.py v0.4.0 — компилятор PR → звуковая машина
 #
 # Вход: .pr-программа (формат как в run_pr.py).
 # Выход: .sound.json — программа звуковой машины:
 #   {"fmt": "sound-v0.3", "src_sha256": ..., "entry": имя,
-#    "fns": {имя: {"params": [...], "code": [...]}},
+#    "fns": {имя: {"params": [...], "slots": [...], "code": [...]}},
 #    "main": {"code": [...]}}
 # Исполнитель (run_sound.py) проверяет поле fmt — файлы другого формата
 # отвергаются с явным сообщением (защита от огрызков прошлых версий).
@@ -19,6 +19,15 @@
 #   HALT
 # Протокол записи: {"pc", "op", "args", "state": {"V": ...}, "depth", "cid"}
 # CALL/RET парны по cid (монотонный номер вызова); depth — вложенность.
+#
+# v0.3.2: семантический барьер до кодогенерации (свободные имена, entry).
+# v0.4.0: лямбда-лифтинг. Свободные имена тела prec-шага поднимаются в
+#   дополнительные аргументы вызова: на prec-месте перед CALL добавляются
+#   LOAD, шаг компилируется с расширенным списком параметров. Машина
+#   (run_sound) не меняется. Барьер переформулирован: свободное имя шага
+#   разрешено, если оно видно на месте вызова — в параметрах вызывающего
+#   или в его собственных поднятых именах. Лифтинг одноуровневый:
+#   цепочки шагов с транзитивными свободными именами — открытый вопрос MM-3.
 
 import sys, hashlib, re
 
@@ -147,32 +156,10 @@ def parse_program(text):
         raise SyntaxError("нет строки entry")
     return fns, entry
 
-def prec_steps(node, out):
-    k = node[0]
-    if k == "prec":
-        out.append(node[3][1])
-        prec_steps(node[1], out); prec_steps(node[2], out)
-    elif k == "bin":
-        prec_steps(node[2], out); prec_steps(node[3], out)
-    elif k == "call":
-        for a in node[2]:
-            prec_steps(a, out)
-
-def build_lift_map(fns):
-    lift = {}
-    for f in fns.values():
-        steps = []
-        prec_steps(f["body"], steps)
-        for s in steps:
-            for nm in sorted(collect_vars(fns[s]["body"]) - set(fns[s]["params"])):
-                cur = lift.setdefault(s, [])
-                if nm not in cur:
-                    cur.append(nm)
-    return lift
-
+# ---------- анализ свободных имён и prec-шагов (v0.3.2 / v0.4.0) ----------
 
 def collect_vars(node, out=None):
-    """Переменные в узле AST. Ссылка на функцию-шаг prec не считается."""
+    """Переменные узла AST. Ссылка на функцию-шаг prec не считается."""
     if out is None:
         out = set()
     k = node[0]
@@ -189,12 +176,24 @@ def collect_vars(node, out=None):
         # node[3] — ("var", имя функции-шага): имя функции, не переменная
     return out
 
+def prec_steps(node, out):
+    """Имена prec-шагов, встречающихся в узле, в порядке обхода."""
+    k = node[0]
+    if k == "prec":
+        out.append(node[3][1])
+        prec_steps(node[1], out); prec_steps(node[2], out)
+    elif k == "bin":
+        prec_steps(node[2], out); prec_steps(node[3], out)
+    elif k == "call":
+        for a in node[2]:
+            prec_steps(a, out)
 
 # ---------- компиляция ----------
 
 class FnCompiler:
-    def __init__(self, name, params):
+    def __init__(self, name, params, lift=None):
         self.name = name
+        self.lift = lift or {}
         self.slots = {}
         self.code = []
         for p in params:
@@ -254,12 +253,12 @@ class FnCompiler:
         self.emit("SUB")                          # N-C >= 0: V не падает в минус
         jz_idx = len(self.code)
         self.emit("JZ")                           # C-N == 0 -> l2; патчить
-        #self.emit("LOAD", self.slots[C])          # arg0 = i (0..N-1)
-        #self.emit("LOAD", self.slots[ACC])        # arg1 = acc
-        #self.emit("CALL", [h_ref, 2])
+        self.emit("LOAD", self.slots[C])          # arg0 = i (0..N-1)
+        self.emit("LOAD", self.slots[ACC])        # arg1 = acc
+        # v0.4.0: поднятые имена шага — дополнительные аргументы CALL
         extra = self.lift.get(h_ref, [])
         for nm in extra:
-            self.emit("LOAD", self.slots[nm])   # nm обязан быть в слотах — проверяет барьер
+            self.emit("LOAD", self.slots[nm])     # nm виден — барьер проверил
         self.emit("CALL", [h_ref, 2 + len(extra)])
         self.emit("STORE", self.slots[ACC])
         self.emit("LOAD", self.slots[C])
@@ -273,23 +272,50 @@ class FnCompiler:
 
 KNOWN_FNS = set()
 
+def build_lift_map(fns):
+    """Для каждого prec-шага — объединение свободных имён его тела
+    по всем местам вызова. Один и тот же шаг может зваться из разных
+    функций: лифтинг обязан покрыть худший случай."""
+    lift = {}
+    for f in fns.values():
+        steps = []
+        prec_steps(f["body"], steps)
+        for s in steps:
+            if s not in fns:
+                raise NameError(f"функция шага {s} не определена")
+            for nm in sorted(collect_vars(fns[s]["body"]) - set(fns[s]["params"])):
+                cur = lift.setdefault(s, [])
+                if nm not in cur:
+                    cur.append(nm)
+    return lift
+
 def compile_program(text):
     fns, entry = parse_program(normalize(text))
     KNOWN_FNS.update(fns.keys())
-    # --- семантическая проверка (до кодогенерации) ---
+    lift = build_lift_map(fns)
+    # --- семантический барьер v0.4.0 (до кодогенерации) ---
     for name, f in fns.items():
-        fv = collect_vars(f["body"]) - set(f["params"])
+        fv = collect_vars(f["body"]) - set(f["params"]) - set(lift.get(name, []))
         if fv:
             raise NameError(
                 f"свободные имена в теле {name}: {sorted(fv)} — "
-                f"доступны только параметры ({', '.join(f['params'])})")
+                f"не доступны в области функции (параметры: {', '.join(f['params'])}; "
+                f"поднятые: {', '.join(lift.get(name, [])) or '—'})")
+        steps = []
+        prec_steps(f["body"], steps)
+        visible = set(f["params"]) | set(lift.get(name, []))
+        for s in steps:
+            missing = [nm for nm in lift.get(s, []) if nm not in visible]
+            if missing:
+                raise NameError(
+                    f"шаг {s} требует поднятые имена {missing}, "
+                    f"не видимые в области {name}")
     if entry["name"] not in fns:
         raise NameError(f"entry указывает на неопределённую функцию {entry['name']}")
     for aexpr in entry["args"]:
         fv = collect_vars(aexpr)
         if fv:
             raise NameError(f"аргументы entry — только литералы, найдены имена: {sorted(fv)}")
-
     prog = {
         "fmt": "sound-v0.3",
         "src_sha256": sha256_of(text),
@@ -297,8 +323,8 @@ def compile_program(text):
         "fns": {},
     }
     for name, f in fns.items():
-        #comp = FnCompiler(name, f["params"])
-        comp = FnCompiler(name, f["params"] + lift.get(name, []))
+        params = f["params"] + lift.get(name, [])   # v0.4.0: поднятые — в хвост
+        comp = FnCompiler(name, params, lift)
         comp.compile_expr(f["body"])
         if not comp.code or comp.code[-1][0] != "RET":
             comp.emit("RET")
@@ -306,11 +332,11 @@ def compile_program(text):
         for nm, idx in comp.slots.items():
             slots[idx] = nm
         prog["fns"][name] = {
-            "params": f["params"],
+            "params": params,
             "slots": slots,
             "code": comp.code,
         }
-    comp = FnCompiler("main", [])
+    comp = FnCompiler("main", [], lift)
     for aexpr in entry["args"]:
         comp.compile_expr(aexpr)
     comp.emit("CALL", [entry["name"], len(entry["args"])])
@@ -319,7 +345,8 @@ def compile_program(text):
     # метки компилировались в локальных координатах функции,
     # исполняются в глобальных — перебазируем при сборке
     offset = len(prog["main"]["code"])
-    for f in prog["fns"].values():
+    for name in prog["fns"]:
+        f = prog["fns"][name]
         for ins in f["code"]:
             if ins[0] in ("JZ", "JMP"):
                 ins[1] += offset
