@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-# pr2sound.py v0.4.0 — компилятор PR → звуковая машина
+# pr2sound.py v0.5.0 — компилятор PR → звуковая машина
+#
+# v0.5.0: ifz + spawn/await. Понижение: spawn(f(args)) -> вычислить args;
+#   SPAWN [fn, n] (машина снимает аргументы, создаёт задачу, кладёт cid);
+#   await(spawn(...)) -> код spawn; AWAIT (peek-семантика: cid не снимается,
+#   пока потомок не готов; готов — cid снимается, кладётся значение).
+#   Дисциплина (check_spawn): spawn только как await(spawn(...)); внутри
+#   spawn — только вызов обычной функции. fmt остаётся sound-v0.3.
 #
 # Вход: .pr-программа (формат как в run_pr.py).
 # Выход: .sound.json — программа звуковой машины:
@@ -118,6 +125,19 @@ class Parser:
                     if len(args) != 3:
                         raise SyntaxError("ifz принимает 3 аргумента: ifz(c, тогда, иначе)")
                     return ("ifz", args[0], args[1], args[2])
+                if t[1] == "spawn":
+                    if len(args) != 1:
+                        raise SyntaxError("spawn принимает 1 аргумент: spawn(f(...))")
+                    inner = args[0]
+                    if inner[0] != "call" or inner[1] in ("ifz", "spawn", "await", "prec"):
+                        raise SyntaxError("spawn принимает вызов обычной функции")
+                    return ("spawn", inner)
+                if t[1] == "await":
+                    if len(args) != 1:
+                        raise SyntaxError("await принимает 1 аргумент: await(spawn(...))")
+                    if args[0][0] != "spawn":
+                        raise SyntaxError("await принимает только spawn(...)")
+                    return ("await", args[0])
                 return ("call", t[1], args)
             return ("var", t[1])
         raise SyntaxError(f"неожиданный токен {t!r}")
@@ -180,6 +200,12 @@ def collect_vars(node, out=None):
         # node[3] — ("var", имя функции-шага): имя функции, не переменная
     elif k == "ifz":
         collect_vars(node[1], out); collect_vars(node[2], out); collect_vars(node[3], out)
+    elif k == "spawn":
+        for a in node[1][2]:
+            collect_vars(a, out)
+    elif k == "await":
+        for a in node[1][1][2]:
+            collect_vars(a, out)
     return out
 
 def prec_steps(node, out):
@@ -190,11 +216,41 @@ def prec_steps(node, out):
         prec_steps(node[1], out); prec_steps(node[2], out)
     elif k == "bin":
         prec_steps(node[2], out); prec_steps(node[3], out)
-    elif k == "ifz":
-        prec_steps(node[1], out); prec_steps(node[2], out); prec_steps(node[3], out)
     elif k == "call":
         for a in node[2]:
             prec_steps(a, out)
+    elif k == "ifz":
+        prec_steps(node[1], out); prec_steps(node[2], out); prec_steps(node[3], out)
+    elif k == "spawn":
+        for a in node[1][2]:
+            prec_steps(a, out)
+    elif k == "await":
+        for a in node[1][1][2]:
+            prec_steps(a, out)
+
+# ---------- дисциплина spawn ----------
+
+def check_spawn(node, under_await=False):
+    """spawn допустим только как await(spawn(...)); иначе — баланс стека
+    машины нарушим по построению (SPAWN кладёт cid, некому снять)."""
+    k = node[0]
+    if k == "spawn":
+        if not under_await:
+            raise SyntaxError("spawn допустим только как await(spawn(...))")
+        for a in node[1][2]:
+            check_spawn(a, False)
+        return
+    if k == "bin":
+        check_spawn(node[2], False); check_spawn(node[3], False)
+    elif k == "call":
+        for a in node[2]:
+            check_spawn(a, False)
+    elif k == "prec":
+        check_spawn(node[1], False); check_spawn(node[2], False)
+    elif k == "ifz":
+        check_spawn(node[1], False); check_spawn(node[2], False); check_spawn(node[3], False)
+    elif k == "await":
+        check_spawn(node[1], True)
 
 # ---------- компиляция ----------
 
@@ -244,6 +300,10 @@ class FnCompiler:
             self.compile_prec(node)
         elif k == "ifz":
             self.compile_ifz(node)
+        elif k == "spawn":
+            self.compile_spawn(node)
+        elif k == "await":
+            self.compile_await(node)
         else:
             raise RuntimeError(f"неизвестный узел {k}")
     def compile_prec(self, node):
@@ -281,16 +341,27 @@ class FnCompiler:
         self.emit("LOAD", self.slots[ACC])        # результат — на стек
     def compile_ifz(self, node):
         cond, then_e, else_e = node[1], node[2], node[3]
-        self.compile_expr(cond)
+        self.compile_expr(cond)                   # условие на стеке
         jz_idx = len(self.code)
-        self.emit("JZ")
-        self.compile_expr(else_e)
+        self.emit("JZ")                           # cond == 0 -> ветка «тогда»
+        self.compile_expr(else_e)                 # «иначе» — 1 значение
         jmp_idx = len(self.code)
         self.emit("JMP")
-        l_then = len(self.code)
+        l_then = len(self.code)                   # «тогда» — 1 значение
         self.compile_expr(then_e)
         self.code[jz_idx][1] = l_then
         self.code[jmp_idx][1] = len(self.code)
+    def compile_spawn(self, node):
+        inner = node[1]
+        name, argnodes = inner[1], inner[2]
+        if name not in KNOWN_FNS:
+            raise NameError(f"функция {name} не определена")
+        for aexpr in argnodes:                    # args — в вызывающем
+            self.compile_expr(aexpr)
+        self.emit("SPAWN", [name, len(argnodes)])
+    def compile_await(self, node):
+        self.compile_spawn(node[1])
+        self.emit("AWAIT")                        # peek: cid со стека
 
 KNOWN_FNS = set()
 
@@ -315,6 +386,11 @@ def compile_program(text):
     fns, entry = parse_program(normalize(text))
     KNOWN_FNS.update(fns.keys())
     lift = build_lift_map(fns)
+    # --- дисциплина spawn (до барьера свободных имён) ---
+    for name, f in fns.items():
+        check_spawn(f["body"])
+    for aexpr in entry["args"]:
+        check_spawn(aexpr)
     # --- семантический барьер v0.4.0 (до кодогенерации) ---
     for name, f in fns.items():
         fv = collect_vars(f["body"]) - set(f["params"]) - set(lift.get(name, []))

@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-# run_pr.py v0.3.1 — прямой интерпретатор PR («прямая дорога»)
+# run_pr.py v0.3.2 — прямой интерпретатор PR («прямая дорога»)
+#
+# v0.3.2: ifz (исправленный) + spawn/await. Спецформы парсера; eager-семантика:
+#   spawn вычисляет потомка немедленно и возвращает Task; await распаковывает.
+#   Дисциплина (check_spawn): spawn допустим только как await(spawn(...)).
+#   steps считают вычислительные операции (bin/succ/prec); spawn/await
+#   учитываются отдельными счётчиками tasks/awaits.
 #
 # Схема записи .pr:
 #   def имя(параметры) = выражение
@@ -97,6 +103,19 @@ class Parser:
                     if args[2][0] != "var":
                         raise SyntaxError("шаг prec задаётся именем функции")
                     return ("prec", args[0], args[1], args[2])
+                if t[1] == "spawn":
+                    if len(args) != 1:
+                        raise SyntaxError("spawn принимает 1 аргумент: spawn(f(...))")
+                    inner = args[0]
+                    if inner[0] != "call" or inner[1] in ("ifz", "spawn", "await", "prec"):
+                        raise SyntaxError("spawn принимает вызов обычной функции")
+                    return ("spawn", inner)
+                if t[1] == "await":
+                    if len(args) != 1:
+                        raise SyntaxError("await принимает 1 аргумент: await(spawn(...))")
+                    if args[0][0] != "spawn":
+                        raise SyntaxError("await принимает только spawn(...)")
+                    return ("await", args[0])
                 return ("call", t[1], args)
             return ("var", t[1])
         raise SyntaxError(f"неожиданный токен {t!r}")
@@ -141,10 +160,37 @@ def parse_program(text):
 
 # ---------- исполнение ----------
 
+class Task:
+    """Ячейка задачи (eager-семантика: значение готово при создании)."""
+    __slots__ = ("value",)
+    def __init__(self, value):
+        self.value = value
+
+def check_spawn(node, under_await=False):
+    """Дисциплина: spawn допустим только как await(spawn(...))."""
+    k = node[0]
+    if k == "spawn":
+        if not under_await:
+            raise SyntaxError("spawn допустим только как await(spawn(...))")
+        for a in node[1][2]:
+            check_spawn(a, False)
+        return
+    if k == "bin":
+        check_spawn(node[2], False); check_spawn(node[3], False)
+    elif k == "call":
+        for a in node[2]:
+            check_spawn(a, False)
+    elif k == "prec":
+        check_spawn(node[1], False); check_spawn(node[2], False)
+    elif k == "await":
+        check_spawn(node[1], True)
+
 class Interp:
     def __init__(self, fns):
         self.fns = fns
         self.steps = 0
+        self.tasks = 0
+        self.awaits = 0
     def eval(self, node, env):
         k = node[0]
         if k == "num":
@@ -174,6 +220,20 @@ class Interp:
                 raise NameError(f"функция {name} не определена")
             args = [self.eval(x, env) for x in argnodes]
             return self.eval(f["body"], dict(zip(f["params"], args)))
+        if k == "spawn":
+            inner = node[1]
+            name, argnodes = inner[1], inner[2]
+            if name not in self.fns:
+                raise NameError(f"функция {name} не определена")
+            f = self.fns[name]
+            args = [self.eval(x, env) for x in argnodes]
+            if len(f["params"]) != len(args):
+                raise SyntaxError(f"{name} принимает {len(f['params'])} аргументов, передано {len(args)}")
+            self.tasks += 1
+            return Task(self.eval(f["body"], dict(zip(f["params"], args))))
+        if k == "await":
+            self.awaits += 1
+            return self.eval(node[1], env).value
         if k == "prec":
             c_expr, g_expr, h_ref = node[1], node[2], node[3]
             h = self.fns.get(h_ref[1])
@@ -196,7 +256,12 @@ def main():
     path = sys.argv[1] if len(sys.argv) > 1 else "fact.pr"
     text = open(path, encoding="utf-8").read()
     fns, entry = parse_program(normalize(text))
+    for fn in fns.values():
+        check_spawn(fn["body"])
+    for aexpr in entry["args"]:
+        check_spawn(aexpr)
     interp = Interp(fns)
+    interp.tasks = 1          # корневая задача
     f = fns.get(entry["name"])
     if f is None:
         raise NameError(f"entry-функция {entry['name']} не определена")
@@ -204,6 +269,10 @@ def main():
     value = interp.eval(f["body"], dict(zip(f["params"], args)))
     print(f"value={value}")
     print(f"steps={interp.steps}")
+    if interp.tasks > 1:
+        print(f"tasks={interp.tasks}")
+    if interp.awaits:
+        print(f"awaits={interp.awaits}")
     print(f"sha256={sha256_of(text)}")
 
 if __name__ == "__main__":
