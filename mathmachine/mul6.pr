@@ -1,0 +1,6 @@
+; умножение на 6: 7 повторов add(acc, 6) — литерал вместо свободной переменной
+def g(k, acc) = succ(acc)
+def add(a, b) = prec(b, a, g)
+def h(k, acc) = add(acc, 6)
+def mul(a, b) = prec(b, 0, h)
+entry mul(6, 7)

@@ -1,0 +1,6 @@
+python pr2sound.py mul.pr mul.sound.json
+python run_pr.py    mul.pr
+python run_sound.py mul.sound.json --protocol mul.sound.jsonl
+python mm_pred.py   inv_nonneg.mmx   mul.sound.jsonl   # ждём VERIFIED
+python mm_pred.py   inv_pair.mmx     mul.sound.jsonl   # VERIFIED
+python mm_pred.py   inv_balance.mmx  mul.sound.jsonl   # VERIFIED

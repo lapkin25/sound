@@ -147,6 +147,25 @@ def parse_program(text):
         raise SyntaxError("нет строки entry")
     return fns, entry
 
+def collect_vars(node, out=None):
+    """Переменные в узле AST. Ссылка на функцию-шаг prec не считается."""
+    if out is None:
+        out = set()
+    k = node[0]
+    if k == "var":
+        out.add(node[1])
+    elif k == "bin":
+        collect_vars(node[2], out); collect_vars(node[3], out)
+    elif k == "call":
+        for a in node[2]:
+            collect_vars(a, out)
+    elif k == "prec":
+        collect_vars(node[1], out)
+        collect_vars(node[2], out)
+        # node[3] — ("var", имя функции-шага): имя функции, не переменная
+    return out
+
+
 # ---------- компиляция ----------
 
 class FnCompiler:
@@ -229,6 +248,20 @@ KNOWN_FNS = set()
 def compile_program(text):
     fns, entry = parse_program(normalize(text))
     KNOWN_FNS.update(fns.keys())
+    # --- семантическая проверка (до кодогенерации) ---
+    for name, f in fns.items():
+        fv = collect_vars(f["body"]) - set(f["params"])
+        if fv:
+            raise NameError(
+                f"свободные имена в теле {name}: {sorted(fv)} — "
+                f"доступны только параметры ({', '.join(f['params'])})")
+    if entry["name"] not in fns:
+        raise NameError(f"entry указывает на неопределённую функцию {entry['name']}")
+    for aexpr in entry["args"]:
+        fv = collect_vars(aexpr)
+        if fv:
+            raise NameError(f"аргументы entry — только литералы, найдены имена: {sorted(fv)}")
+
     prog = {
         "fmt": "sound-v0.3",
         "src_sha256": sha256_of(text),
