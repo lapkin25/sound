@@ -1,0 +1,6 @@
+def g(k, acc)     = succ(acc)
+def add(a, b)     = prec(b, a, g)
+def fib(n) = ifz(n, 1, sp2)
+def sp2(n) = add(await(spawn(fib(n - 1))), await(spawn(fib(n - 2))))
+
+entry fib(5)
