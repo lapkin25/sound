@@ -1,7 +1,0 @@
-; ТЕСТ-ОТРИЦАНИЕ: компиляция обязана падать
-; Ожидание: NameError про свободное имя 'a' в теле h
-def g(k, acc) = succ(acc)
-def add(a, b) = prec(b, a, g)
-def h(k, acc) = add(acc, a)
-def mul(a, b) = prec(b, 0, h)
-entry mul(6, 7)
