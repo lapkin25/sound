@@ -1,0 +1,8 @@
+; усечённое вычитание (monus): a ∸ b = max(a - b, 0)
+; построение: mon(a, b) = pred^b(a),  pred(a) = prec(a, 0, pstep)
+; prec сам стоит на нуле, поэтому ни один SUB не уходит в минус
+def mon(a, b) = prec(b, a, hstep)
+def hstep(i, acc) = pred(acc)
+def pred(a) = prec(a, 0, pstep)
+def pstep(i, x) = i
+entry mon(7, 3)

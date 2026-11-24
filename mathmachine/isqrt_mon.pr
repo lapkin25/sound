@@ -1,0 +1,23 @@
+; isqrt — целая часть квадратного корня
+; isqrt(n) = число k >= 1, для которых k*k <= n
+; монус строится из prec: pred(a) = prec(a, 0, pret)
+; сравнение: (i+1)^2 <= n  <=>  mon((i+1)^2, n) = 0
+; без оператора "-" и без отрицательных значений — inv_nonneg не страдает
+
+def g(k, acc) = succ(acc)
+def add(a, b) = prec(b, a, g)
+def h(k, acc) = add(acc, a)
+def mul(a, b) = prec(b, 0, h)
+
+def pret(i, a) = i
+def mstep(i, a) = prec(a, 0, pret)
+
+def mon(a, b) = prec(b, a, hstep)
+def hstep(i, acc) = pred(acc)
+def pred(a) = prec(a, 0, pstep)
+def pstep(i, x) = i
+
+def hcnt(i, a) = a + ifz(mon(mul(succ(i), succ(i)), n), 1, 0)
+def isqrt(n) = prec(n, 0, hcnt)
+
+entry isqrt(17)
