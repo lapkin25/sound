@@ -1,0 +1,11 @@
+; Аккерман — общая рекурсия (не PR-функция!):
+; A(0, n)   = n + 1
+; A(m+1, 0) = A(m, 1)
+; A(m+1, n) = A(m, A(m+1, n-1))
+
+def pret(i, a) = i
+def pred(a) = prec(a, 0, pret)
+
+def ack(m, n) = ifz(m, n + 1, ifz(n, ack(pred(m), 1), ack(pred(m), ack(m, pred(n)))))
+
+entry ack(3, 3)
