@@ -1,0 +1,18 @@
+; divmod: деление нацело и остаток (b >= 1)
+;   div(a, b) = |{ i < a : (i+1)*b <= a }|   (Клеен, 1947)
+;   mod(a, b) = a ∸ div(a,b)*b
+; индикатор: ind(x) = mon(1, x)  --  0 -> 1, иначе 0
+; все вычитания - через mon: ни одного "сырого" минуса
+def mon(a, b) = prec(b, a, hstep)
+def hstep(i, acc) = pred(acc)
+def pred(a) = prec(a, 0, pstep)
+def pstep(i, x) = i
+def add(x, y) = prec(x, y, astep)
+def astep(i, acc) = acc + 1
+def ind(x) = mon(1, x)
+def mult(x, y) = prec(y, 0, mstep)
+def mstep(j, acc) = add(acc, x)
+def dstep(i, q) = add(q, ind(mon(b, mon(a, mult(i, b)))))
+def div(a, b) = prec(a, 0, dstep)
+def mod(a, b) = mon(a, mult(div(a, b), b))
+entry div(13, 3)
