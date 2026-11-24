@@ -13,30 +13,32 @@ def test_add():
         ([[1, 0], [1]], [1, 1]),
         ([[1, 1], [1, 0]], [1, 0, 1])
     ]
-
+    
     for i, (input_data, expected) in enumerate(test_cases):
-        print(f"\nTest case {i+1}:")
+        print(f"\nТестовый пример {i+1}:")
         tm = TuringMachine(tm_config)
         tm.set_input(input_data)
-
-        # Выводим начальное состояние
+        
         print("\nНачальное состояние:")
         tm.print_tape()
         tm.print_commands()
-
+        
+        print("\nЗапуск машины Тьюринга...")
         tm.run()
-
-        # Выводим лог выполнения
+        
+        print("\nПодробный лог выполнения:")
         tm.print_log()
-
-        # Выводим конечное состояние
+        
         print("\nКонечное состояние:")
         tm.print_tape()
-
+        
         result = tm.get_output()
-        print(f"Input: {input_data}, Expected: {expected}, Got: {result}")
-        assert result == expected, f"Test failed for input {input_data}"
-        print("Test passed!\n")
+        print(f"Входные данные: {input_data}")
+        print(f"Ожидаемый результат: {expected}")
+        print(f"Полученный результат: {result}")
+        
+        assert result == expected, f"Ошибка в тестовом примере для входных данных {input_data}"
+        print("Тест пройден!\n")
 
 
 

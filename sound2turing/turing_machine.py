@@ -54,14 +54,17 @@ class TuringMachine:
             return True
         return False
 
-    def run(self, max_steps=10000):
-        steps = 0
-        while steps < max_steps:
-            if not self.step():
-                break
-            steps += 1
-            if self.current_state == self.config['accept_state']:
-                break
+   def run(self, max_steps=10000):
+       steps = 0
+       while steps < max_steps:
+           if not self.step():
+               break
+           steps += 1
+           if self.current_state == self.config['accept_state']:
+               break
+               
+       if steps >= max_steps:
+           print("\nПредупреждение: достигнуто максимальное количество шагов!")
 
     def get_output(self):
         try:
@@ -87,19 +90,22 @@ class TuringMachine:
         start = max(0, self.head_position - 20)
         end = min(len(self.tape), self.head_position + 20)
         tape_view = ''.join(self.tape[start:end])
-
-        # Выделяем позицию головки
-        head_marker = ' ' * (self.head_position - start) + '^'
-
-        print(f"\nСодержимое ленты:")
+        
+        # Создаем маркер позиции головки
+        marker = ' ' * (self.head_position - start) + '^'
+        
+        print(f"\nСостояние ленты:")
         print(f"Лента: {tape_view}")
-        print(f"Позиция головки: {head_marker}")
+        print(f"Маркер: {marker}")
         print(f"Текущее состояние: {self.current_state}")
         print(f"Позиция головки: {self.head_position}")
 
     def print_log(self):
-        print("\nЛог выполнения:")
+        print("\nПодробный лог выполнения:")
         print(f"{'Шаг':<5} | {'Текущее состояние':<15} | {'Символ':<5} | {'Следующее состояние':<15} | {'Запись':<5} | {'Движение':<5} | {'Позиция головки'}")
         print("-" * 80)
+        
         for step in self.log:
-            print(f"{step['step']:<5} | {step['current_state']:<15} | {step['symbol']:<5} | {step['next_state']:<15} | {step['write']:<5} | {step['move']:<5} | {step['head_pos']}")
+            print(f"{step['step']:<5} | {step['current_state']:<15} | {step['symbol']:<5} | "
+                  f"{step['next_state']:<15} | {step['write']:<5} | {step['move']:<5} | "
+                  f"{step['head_pos']}")
