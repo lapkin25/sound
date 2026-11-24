@@ -1,6 +1,6 @@
 def g(k, acc)     = succ(acc)
 def add(a, b)     = prec(b, a, g)
-def fib(n) = ifz(n, 1, sp2)
+; база покрывает n=0 и n=1: иначе fib(1) уходит в fib(-1)
+def fib(n) = ifz(n, 1, ifz(n - 1, 1, sp2(n)))
 def sp2(n) = add(await(spawn(fib(n - 1))), await(spawn(fib(n - 2))))
-
 entry fib(5)

@@ -1,9 +1,33 @@
 #!/usr/bin/env python3
-# pr2sound.py v0.4.1 — компилятор PR → звуковая машина
+# pr2sound.py v0.4.0 — компилятор PR → звуковая машина
 #
-# v0.4.1: ifz(c, тогда, иначе) — строгое условие, ленивые ветки (MM-6.1).
-#   Понижение в JZ/JMP, машина не меняется. ifz охвачен всеми обходами AST:
-#   collect_vars и prec_steps обрабатывают ветки (иначе — молчаливая потеря).
+# Вход: .pr-программа (формат как в run_pr.py).
+# Выход: .sound.json — программа звуковой машины:
+#   {"fmt": "sound-v0.3", "src_sha256": ..., "entry": имя,
+#    "fns": {имя: {"params": [...], "slots": [...], "code": [...]}},
+#    "main": {"code": [...]}}
+# Исполнитель (run_sound.py) проверяет поле fmt — файлы другого формата
+# отвергаются с явным сообщением (защита от огрызков прошлых версий).
+#
+# Инструкции (кодировка: [op, arg]; arg=None, где не нужен):
+#   PUSH n            — положить константу
+#   LOAD i / STORE i  — слот текущего фрейма
+#   ADD / SUB / MUL   — b=pop(); a=pop(); V=a op b; push(V)
+#   CALL [fn, nargs]  — снять nargs аргументов, новый фрейм
+#   RET               — вернуть V со стека
+#   JZ метка / JMP метка — условный/безусловный переход по индексу
+#   HALT
+# Протокол записи: {"pc", "op", "args", "state": {"V": ...}, "depth", "cid"}
+# CALL/RET парны по cid (монотонный номер вызова); depth — вложенность.
+#
+# v0.3.2: семантический барьер до кодогенерации (свободные имена, entry).
+# v0.4.0: лямбда-лифтинг. Свободные имена тела prec-шага поднимаются в
+#   дополнительные аргументы вызова: на prec-месте перед CALL добавляются
+#   LOAD, шаг компилируется с расширенным списком параметров. Машина
+#   (run_sound) не меняется. Барьер переформулирован: свободное имя шага
+#   разрешено, если оно видно на месте вызова — в параметрах вызывающего
+#   или в его собственных поднятых именах. Лифтинг одноуровневый:
+#   цепочки шагов с транзитивными свободными именами — открытый вопрос MM-3.
 
 import sys, hashlib, re
 
@@ -155,9 +179,7 @@ def collect_vars(node, out=None):
         collect_vars(node[2], out)
         # node[3] — ("var", имя функции-шага): имя функции, не переменная
     elif k == "ifz":
-        collect_vars(node[1], out)
-        collect_vars(node[2], out)
-        collect_vars(node[3], out)
+        collect_vars(node[1], out); collect_vars(node[2], out); collect_vars(node[3], out)
     return out
 
 def prec_steps(node, out):
@@ -168,11 +190,11 @@ def prec_steps(node, out):
         prec_steps(node[1], out); prec_steps(node[2], out)
     elif k == "bin":
         prec_steps(node[2], out); prec_steps(node[3], out)
+    elif k == "ifz":
+        prec_steps(node[1], out); prec_steps(node[2], out); prec_steps(node[3], out)
     elif k == "call":
         for a in node[2]:
             prec_steps(a, out)
-    elif k == "ifz":
-        prec_steps(node[1], out); prec_steps(node[2], out); prec_steps(node[3], out)
 
 # ---------- компиляция ----------
 
@@ -224,23 +246,6 @@ class FnCompiler:
             self.compile_ifz(node)
         else:
             raise RuntimeError(f"неизвестный узел {k}")
-    def compile_ifz(self, node):
-        """MM-6.1: строгое условие, ленивые ветки. Исполняется ровно одна
-        ветка; каждая ветка по построению compile_expr оставляет на стеке
-        ровно одно значение (инвариант баланса соблюдается автоматически).
-        Патчинг меток в локальных координатах функции — как в compile_prec;
-        глобальный rebase при сборке покрывает новые JZ/JMP автоматически."""
-        cond, then_e, else_e = node[1], node[2], node[3]
-        self.compile_expr(cond)                 # условие на стеке
-        jz_idx = len(self.code)
-        self.emit("JZ")                         # cond == 0 -> ветка «тогда»
-        self.compile_expr(else_e)               # ветка «иначе» — 1 значение
-        jmp_idx = len(self.code)
-        self.emit("JMP")
-        l_then = len(self.code)                 # ветка «тогда»
-        self.compile_expr(then_e)               # 1 значение
-        self.code[jz_idx][1] = l_then
-        self.code[jmp_idx][1] = len(self.code)  # L_end — следующая инструкция
     def compile_prec(self, node):
         c_expr, g_expr, h_ref = node[1], node[2], node[3][1]
         if h_ref not in KNOWN_FNS:
@@ -274,6 +279,18 @@ class FnCompiler:
         l2 = len(self.code)
         self.code[jz_idx][1] = l2
         self.emit("LOAD", self.slots[ACC])        # результат — на стек
+    def compile_ifz(self, node):
+        cond, then_e, else_e = node[1], node[2], node[3]
+        self.compile_expr(cond)
+        jz_idx = len(self.code)
+        self.emit("JZ")
+        self.compile_expr(else_e)
+        jmp_idx = len(self.code)
+        self.emit("JMP")
+        l_then = len(self.code)
+        self.compile_expr(then_e)
+        self.code[jz_idx][1] = l_then
+        self.code[jmp_idx][1] = len(self.code)
 
 KNOWN_FNS = set()
 

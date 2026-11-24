@@ -1,0 +1,4 @@
+def base(n) = 1
+def step(n) = 2
+def f(n) = ifz(n, base(n), step(n))
+entry f(0)
