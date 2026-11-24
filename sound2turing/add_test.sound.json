@@ -1,0 +1,24 @@
+{
+  "fmt": "sound-v0.3",
+  "entry": "add",
+  "fns": {
+    "add": {
+      "params": ["a", "b"],
+      "slots": ["a", "b", "N1", "C2", "ACC3"],
+      "code": [
+        ["LOAD", 0],
+        ["LOAD", 1],
+        ["ADD", null],
+        ["RET", null]
+      ]
+    }
+  },
+  "main": {
+    "code": [
+      ["PUSH", 2],
+      ["PUSH", 3],
+      ["CALL", ["add", 2]],
+      ["HALT", null]
+    ]
+  }
+}
