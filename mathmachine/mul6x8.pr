@@ -1,0 +1,5 @@
+def g(k, acc) = succ(acc)
+def add(a, b) = prec(b, a, g)
+def h(k, acc) = add(acc, 6)
+def mul(a, b) = prec(b, 0, h)
+entry mul(6, 8)

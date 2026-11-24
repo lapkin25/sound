@@ -1,0 +1,3 @@
+python mm_pred.py inv_nonneg.mmx  mul8.sound.jsonl
+python mm_pred.py inv_pair.mmx    mul8.sound.jsonl
+python mm_pred.py inv_balance.mmx mul8.sound.jsonl
