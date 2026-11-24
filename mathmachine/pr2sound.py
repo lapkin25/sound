@@ -147,6 +147,30 @@ def parse_program(text):
         raise SyntaxError("нет строки entry")
     return fns, entry
 
+def prec_steps(node, out):
+    k = node[0]
+    if k == "prec":
+        out.append(node[3][1])
+        prec_steps(node[1], out); prec_steps(node[2], out)
+    elif k == "bin":
+        prec_steps(node[2], out); prec_steps(node[3], out)
+    elif k == "call":
+        for a in node[2]:
+            prec_steps(a, out)
+
+def build_lift_map(fns):
+    lift = {}
+    for f in fns.values():
+        steps = []
+        prec_steps(f["body"], steps)
+        for s in steps:
+            for nm in sorted(collect_vars(fns[s]["body"]) - set(fns[s]["params"])):
+                cur = lift.setdefault(s, [])
+                if nm not in cur:
+                    cur.append(nm)
+    return lift
+
+
 def collect_vars(node, out=None):
     """Переменные в узле AST. Ссылка на функцию-шаг prec не считается."""
     if out is None:
@@ -230,9 +254,13 @@ class FnCompiler:
         self.emit("SUB")                          # N-C >= 0: V не падает в минус
         jz_idx = len(self.code)
         self.emit("JZ")                           # C-N == 0 -> l2; патчить
-        self.emit("LOAD", self.slots[C])          # arg0 = i (0..N-1)
-        self.emit("LOAD", self.slots[ACC])        # arg1 = acc
-        self.emit("CALL", [h_ref, 2])
+        #self.emit("LOAD", self.slots[C])          # arg0 = i (0..N-1)
+        #self.emit("LOAD", self.slots[ACC])        # arg1 = acc
+        #self.emit("CALL", [h_ref, 2])
+        extra = self.lift.get(h_ref, [])
+        for nm in extra:
+            self.emit("LOAD", self.slots[nm])   # nm обязан быть в слотах — проверяет барьер
+        self.emit("CALL", [h_ref, 2 + len(extra)])
         self.emit("STORE", self.slots[ACC])
         self.emit("LOAD", self.slots[C])
         self.emit("PUSH", 1)
@@ -269,7 +297,8 @@ def compile_program(text):
         "fns": {},
     }
     for name, f in fns.items():
-        comp = FnCompiler(name, f["params"])
+        #comp = FnCompiler(name, f["params"])
+        comp = FnCompiler(name, f["params"] + lift.get(name, []))
         comp.compile_expr(f["body"])
         if not comp.code or comp.code[-1][0] != "RET":
             comp.emit("RET")
