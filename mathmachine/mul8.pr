@@ -1,0 +1,6 @@
+; умножение на 8 — та же программа, другой литерал в базе prec
+def g(k, acc) = succ(acc)
+def add(a, b) = prec(b, a, g)
+def h(k, acc) = add(acc, 8)
+def mul(a, b) = prec(b, 0, h)
+entry mul(6, 8)
