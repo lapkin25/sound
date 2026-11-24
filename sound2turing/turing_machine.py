@@ -111,3 +111,20 @@ class TuringMachine:
             print(f"{step['step']:<5} | {step['current_state']:<15} | {step['symbol']:<5} | "
                   f"{step['next_state']:<15} | {step['write']:<5} | {step['move']:<5} | "
                   f"{step['head_pos']}")
+
+
+class TuringMachineGraph:
+    def __init__(self, transitions):
+        self.graph = {}
+        for (state, symbol), (next_state, _, _) in transitions.items():
+            if state not in self.graph:
+                self.graph[state] = {}
+            if next_state not in self.graph[state]:
+                self.graph[state][next_state] = []
+            self.graph[state][next_state].append(symbol)
+
+    def print_graph(self):
+        for state, edges in self.graph.items():
+            print(f"Состояние: {state}")
+            for next_state, symbols in edges.items():
+                print(f"  → {next_state} при символах: {', '.join(symbols)}")
