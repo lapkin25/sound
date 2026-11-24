@@ -259,6 +259,15 @@ class Engine:
                     x = None
             return x
 
+        """
+         if h == 'not':
+            x = self._safe(v[1], env)
+            if x is False:
+                # опровержение отрицания заземлено текущей записью
+                self._fail_witness(env)
+                return False
+            return None if x is None else (not x)
+        """
         if h == 'not':
             if len(v) != 2:
                 raise MMError('(not P) — один аргумент')
