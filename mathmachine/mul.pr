@@ -1,5 +1,8 @@
 ; Math Machine: умножение через prec со сложением как вспомогательной функцией
+; add(a, 0) = a,  add(a, succ k) = succ(add(a, k))
 ; mul(a, 0) = 0,  mul(a, succ k) = add(mul(a, k), a); счётчик — второй аргумент
-def mul(a, b) = prec(b, 0, h)
+def g(k, acc) = succ(acc)
+def add(a, b) = prec(b, a, g)
 def h(k, acc) = add(acc, a)
+def mul(a, b) = prec(b, 0, h)
 entry mul(6, 7)
