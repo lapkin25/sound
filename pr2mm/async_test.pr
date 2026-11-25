@@ -1,0 +1,3 @@
+def task(x) = spawn(add(x, 1))
+def main(x) = await(task(x))
+entry main(5)  # Ожидаемый результат: 6

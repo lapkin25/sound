@@ -1,0 +1,2 @@
+def ack(m, n) = ifz(m, succ(n), ifz(n, ack(succ(m-1), 0), ack(m, ack(m-1, n))))
+entry ack(2, 3)  # Ожидаемый результат: 29
