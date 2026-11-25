@@ -1,0 +1,10 @@
+def sum_array(arr, n) = 
+    let sum = 0
+    for i from 0 to n:
+        if i < n:  # Проверка выхода за границы
+            sum = sum + arr[i]
+        else:
+            sum = sum + 0
+    sum
+
+entry sum_array(array(5), 5)  # Создаем массив размера 5 и суммируем его
