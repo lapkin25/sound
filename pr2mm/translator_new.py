@@ -1,4 +1,60 @@
 class MMCodeGenerator:
+    # Существующие методы...
+
+    def translate_while(self, node):
+        cond = self.translate_expr(node[1])
+        body = self.translate_expr(node[2])
+        loop_label = f"while_loop_{self.label_counter}"
+        end_label = f"while_end_{self.label_counter}"
+        self.label_counter += 1
+        return (
+            f"{loop_label}:\n"
+            f"{cond}\n"
+            f"IFZ_JMP {end_label}\n"
+            f"{body}\n"
+            f"JMP {loop_label}\n"
+            f"{end_label}:\n"
+        )
+
+    def translate_expr(self, node):
+        if node[0] == "while":
+            return self.translate_while(node)
+        # Остальные случаи...
+
+    def generate_phi_function(self):
+        self.generate_function(
+            "phi",
+            ["n"],
+            ("let", "result", ("var", "n"),
+             ("let", "i", 2,
+              ("while", ("bin", "<=", ("bin", "*", ("var", "i"), ("var", "i")), ("var", "n")),
+               ("if", ("bin", "==", ("bin", "mod", ("var", "n"), ("var", "i")), 0),
+                ("block",
+                 ("assign", ("var", "result"), 
+                  ("bin", "-", ("var", "result"), 
+                   ("bin", "/", ("var", "result"), ("var", "i")))),
+                 ("while", ("bin", "==", ("bin", "mod", ("var", "n"), ("var", "i")), 0),
+                  ("assign", ("var", "n"), 
+                   ("bin", "/", ("var", "n"), ("var", "i"))))),
+                ("assign", ("var", "i"), ("bin", "+", ("var", "i"), 1)))),
+              ("if", ("bin", ">", ("var", "n"), 1),
+               ("assign", ("var", "result"), 
+                ("bin", "-", ("var", "result"), 
+                 ("bin", "/", ("var", "result"), ("var", "n"))))),
+             ("return", ("var", "result"))
+            )
+        )
+
+# Пример использования
+if __name__ == "__main__":
+    gen = MMCodeGenerator()
+    gen.generate_phi_function()
+    gen.generate_main("phi", [36])  # Тестовый случай
+    print(gen.emit())
+
+
+
+class MMCodeGenerator:
     def __init__(self):
         self.functions = {}
         self.main_code = []
