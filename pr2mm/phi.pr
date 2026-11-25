@@ -1,0 +1,26 @@
+def gcd(a, b) = ifz(b, a, gcd(b, a mod b))
+
+def is_coprime(a, b) = ifz(gcd(a, b), 1, 0)
+
+def phi(n) = 
+    let count = 0
+    for i from 1 to n:
+        if is_coprime(i, n):
+            count = count + 1
+    count
+
+# Оптимизированная версия через факторизацию
+def phi_optimized(n) = 
+    let result = n
+    let i = 2
+    while i * i <= n:
+        if n mod i == 0:
+            result = result - result div i
+            while n mod i == 0:
+                n = n div i
+        i = i + 1
+    if n > 1:
+        result = result - result div n
+    result
+
+entry phi_optimized(36)  # Ожидаемый результат: 12
