@@ -1,0 +1,24 @@
+VERIFICATION_RULES = {
+    "functions": {
+        "gcd": {
+            "params": ["int", "int"],
+            "preconditions": ["arg1 >= 0", "arg2 >= 0"],
+            "postconditions": "result >= 0"
+        },
+        "phi": {
+            "params": ["int"],
+            "preconditions": ["arg1 > 0"],
+            "postconditions": "result >= 0"
+        }
+    },
+    "operations": {
+        "add": {"type": "arithmetic"},
+        "sub": {"type": "arithmetic"},
+        "mul": {"type": "arithmetic"},
+        "div": {"type": "arithmetic", "check_divide_by_zero": True}
+    },
+    "arrays": {
+        "access": "check_bounds",
+        "initialization": "required"
+    }
+}
