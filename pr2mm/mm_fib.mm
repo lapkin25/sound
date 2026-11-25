@@ -1,0 +1,41 @@
+FUNC add
+LOAD a
+LOAD b
++_OP
+RETURN
+END
+FUNC sub
+LOAD a
+LOAD b
+-_OP
+RETURN
+END
+FUNC fib_step
+LOAD n
+IFZ_JMP ifz_true_0
+LOAD n
+LOAD 1
+CALL sub
+LOAD b
+LOAD a
+LOAD b
+CALL add
+CALL fib_step
+JMP ifz_end_0
+ifz_true_0:
+LOAD a
+ifz_end_0:
+
+RETURN
+END
+FUNC fib
+LOAD n
+LOAD 0
+LOAD 1
+CALL fib_step
+RETURN
+END
+MAIN
+PUSH 10
+CALL fib
+EXIT

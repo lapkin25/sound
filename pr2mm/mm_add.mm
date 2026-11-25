@@ -1,0 +1,11 @@
+FUNC add
+LOAD x
+LOAD y
++_OP
+RETURN
+END
+MAIN
+PUSH 5
+PUSH 3
+CALL add
+EXIT
