@@ -14,6 +14,8 @@ gcd_exit:
 END
 
 FUNC is_coprime
+    LOAD a
+    LOAD b
     CALL gcd
     IFZ_JMP coprime_true
     LOAD 0
@@ -61,9 +63,4 @@ phi_end:
     LOAD result
     LOAD n
     DIV_OP
-    SUB_OP
-    STORE result
-skip_last:
-    LOAD result
-    RETURN
-END
+    SUB_
