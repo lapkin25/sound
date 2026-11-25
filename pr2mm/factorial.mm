@@ -1,0 +1,27 @@
+FUNC sub
+PARAMS x,y
+LOAD x
+LOAD y
+SUB_OP
+RETURN
+END
+FUNC fact
+PARAMS n
+LOAD n
+IFZ_JMP ifz_then_0
+LOAD n
+LOAD n
+LOAD 1
+CALL sub
+CALL fact
+CALL mul
+JMP ifz_end_1
+ifz_then_0:
+LOAD 1
+ifz_end_1:
+RETURN
+END
+MAIN
+PUSH 5
+CALL fact
+EXIT

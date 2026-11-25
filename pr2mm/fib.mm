@@ -1,0 +1,45 @@
+FUNC add
+PARAMS x,y
+LOAD x
+LOAD y
+ADD_OP
+RETURN
+END
+FUNC sub
+PARAMS x,y
+LOAD x
+LOAD y
+SUB_OP
+RETURN
+END
+FUNC fib
+PARAMS n
+LOAD n
+IFZ_JMP ifz_then_0
+LOAD n
+LOAD 1
+CALL sub
+IFZ_JMP ifz_then_2
+LOAD n
+LOAD 1
+CALL sub
+CALL fib
+LOAD n
+LOAD 2
+CALL sub
+CALL fib
+CALL add
+JMP ifz_end_3
+ifz_then_2:
+LOAD 1
+ifz_end_3:
+JMP ifz_end_1
+ifz_then_0:
+LOAD 0
+ifz_end_1:
+RETURN
+END
+MAIN
+PUSH 5
+CALL fib
+EXIT
