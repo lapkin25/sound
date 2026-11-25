@@ -1,8 +1,3 @@
-Давайте завершим реализацию функции Эйлера с учетом всех необходимых компонентов.
-
-### Обновленный код транслятора с поддержкой функции Эйлера
-
-```python
 class MMCodeGenerator:
     def __init__(self):
         self.functions = {}
@@ -83,21 +78,55 @@ class MMCodeGenerator:
             return self.translate_prec(node)
         raise NotImplementedError(f"Неизвестный узел {node[0]}")
 
-# Генерация функций Эйлера
-def generate_phi_functions(gen):
-    # Функция gcd
-    gen.generate_function(
-        "gcd",
-        ["a", "b"],
-        ("ifz", ("var", "b"), ("var", "a"), 
-         ("call", "gcd", [("var", "b"), ("bin", "mod", ("var", "a"), ("var", "b"))])
+    def generate_phi_functions(self):
+        # Добавляем функцию gcd
+        self.generate_function(
+            "gcd",
+            ["a", "b"],
+            ("ifz", ("var", "b"), ("var", "a"), 
+             ("call", "gcd", [("var", "b"), ("bin", "mod", ("var", "a"), ("var", "b"))])
+            )
         )
-    )
-    
-    # Оптимизированная функция phi
-    gen.generate_function(
-        "phi_optimized",
-        ["n"],
-        ("let", "result", ("var", "n"),
-         ("let", "i", 2,
-          ("while", ("bin", "<=", ("bin", "*", ("var", "i"),
+        
+        # Добавляем функцию is_coprime
+        self.generate_function(
+            "is_coprime",
+            ["a", "b"],
+            ("call", "gcd", [("var", "a"), ("var", "b")]),
+            ("ifz", ("var", "gcd_result"), 1, 0)
+        )
+        
+        # Добавляем оптимизированную функцию phi
+        self.generate_function(
+            "phi_optimized",
+            ["n"],
+            ("let", "result", ("var", "n"),
+             ("let", "i", 2,
+              ("while", ("bin", "<=", ("bin", "*", ("var", "i"), ("var", "i")), ("var", "n")),
+               ("if", ("bin", "==", ("bin", "mod", ("var", "n"), ("var", "i")), 0),
+                ("block",
+                 ("assign", ("var", "result"), 
+                  ("bin", "-", ("var", "result"), 
+                   ("bin", "/", ("var", "result"), ("var", "i")))),
+                 ("while", ("bin", "==", ("bin", "mod", ("var", "n"), ("var", "i")), 0),
+                  ("assign", ("var", "n"), 
+                   ("bin", "/", ("var", "n"), ("var", "i"))))),
+                ("assign", ("var", "i"), ("bin", "+", ("var", "i"), 1)))),
+              ("if", ("bin", ">", ("var", "n"), 1),
+               ("assign", ("var", "result"), 
+                ("bin", "-", ("var", "result"), 
+                 ("bin", "/", ("var", "result"), ("var", "n"))))),
+             ("return", ("var", "result"))
+            )
+        )
+
+    def generate_main_phi_test(self):
+        self.generate_main("phi_optimized", [36])  # Тестовый случай
+
+# Пример использования
+if __name__ == "__main__":
+    gen = MMCodeGenerator()
+    gen.generate_phi_functions()
+    gen.generate_main_phi_test()
+    print(gen.emit())
+
